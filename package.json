@@ -1,0 +1,177 @@
+{
+  "name": "anturio-boards",
+  "displayName": "Anturio Boards",
+  "description": "Integração do Anturio Boards no VS Code — gere tarefas, sincroniza com git e usa AI diretamente no editor",
+  "version": "0.1.0",
+  "publisher": "anturio",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "icon": "media/icon.png",
+  "contributes": {
+    "configuration": {
+      "title": "Anturio Boards",
+      "properties": {
+        "anturio.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3001",
+          "description": "URL do servidor Anturio (ex: http://localhost:3001 ou o endereço de produção)"
+        },
+        "anturio.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API Key gerada no Perfil → secção \"API Key — Integração VS Code\""
+        },
+        "anturio.autoRefreshMinutes": {
+          "type": "number",
+          "default": 5,
+          "description": "Intervalo de atualização automática em minutos (0 para desativar)"
+        },
+        "anturio.ai.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ativar funcionalidades de AI"
+        },
+        "anturio.ai.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-6",
+          "description": "Modelo de AI a usar"
+        },
+        "anturio.git.autoLink": {
+          "type": "boolean",
+          "default": false,
+          "description": "Perguntar automaticamente para associar commits a cards"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "anturio-sidebar",
+          "title": "Anturio Boards",
+          "icon": "media/sidebar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "anturio-sidebar": [
+        {
+          "id": "anturio.projectsView",
+          "name": "Projetos",
+          "when": "anturio.authenticated"
+        },
+        {
+          "id": "anturio.welcomeView",
+          "name": "Anturio Boards",
+          "when": "!anturio.authenticated"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "anturio.welcomeView",
+        "contents": "Para usar o Anturio Boards, configura a tua API Key.\n\nVai a Perfil → \"API Key — Integração VS Code\" e gera uma chave.\n\n[Abrir Definições](command:anturio.openSettings)\n\n[Abrir Painel Anturio](command:anturio.openDashboard)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "anturio.openSettings",
+        "title": "Anturio: Abrir Definições"
+      },
+      {
+        "command": "anturio.openDashboard",
+        "title": "Anturio: Abrir Painel Web"
+      },
+      {
+        "command": "anturio.refresh",
+        "title": "Anturio: Atualizar",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "anturio.createCard",
+        "title": "Anturio: Criar Card"
+      },
+      {
+        "command": "anturio.createCardFromSelection",
+        "title": "Anturio: Criar Card a partir da Seleção"
+      },
+      {
+        "command": "anturio.linkCommit",
+        "title": "Anturio: Associar Commit a Card"
+      },
+      {
+        "command": "anturio.aiSuggestCard",
+        "title": "Anturio: AI — Sugerir Card a partir do Código"
+      },
+      {
+        "command": "anturio.openCard",
+        "title": "Anturio: Abrir Card"
+      },
+      {
+        "command": "anturio.viewCardDetails",
+        "title": "Ver Detalhes",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "anturio.signOut",
+        "title": "Anturio: Terminar Sessão"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "anturio.createCardFromSelection",
+          "when": "editorHasSelection",
+          "group": "anturio@1"
+        },
+        {
+          "command": "anturio.aiSuggestCard",
+          "when": "editorHasSelection && config.anturio.ai.enabled",
+          "group": "anturio@2"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "anturio.refresh",
+          "when": "view == anturio.projectsView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "anturio.viewCardDetails",
+          "when": "viewItem == card",
+          "group": "inline"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "anturio.createCardFromSelection",
+        "key": "ctrl+shift+b",
+        "mac": "cmd+shift+b",
+        "when": "editorHasSelection"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0"
+  }
+}

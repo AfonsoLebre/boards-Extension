@@ -1,0 +1,158 @@
+import * as vscode from 'vscode';
+import { boardsClient, Project, Column, Card } from '../api/boardsClient';
+
+type ItemType = 'project' | 'column' | 'card' | 'empty' | 'error';
+
+export class AnturioTreeItem extends vscode.TreeItem {
+  constructor(
+    public readonly label: string,
+    public readonly collapsibleState: vscode.TreeItemCollapsibleState,
+    public readonly itemType: ItemType,
+    public readonly data?: Project | Column | Card,
+    public readonly projectId?: number,
+  ) {
+    super(label, collapsibleState);
+    this.contextValue = itemType;
+    this.applyStyle();
+  }
+
+  private applyStyle() {
+    switch (this.itemType) {
+      case 'project':
+        this.iconPath = new vscode.ThemeIcon('project');
+        this.description = (this.data as Project)?.workspace_name;
+        break;
+      case 'column':
+        this.iconPath = new vscode.ThemeIcon('list-unordered');
+        break;
+      case 'card': {
+        const card = this.data as Card;
+        this.iconPath = new vscode.ThemeIcon(this.priorityIcon(card.priority));
+        this.tooltip = card.description ?? card.title;
+        this.description = card.due_date
+          ? `até ${new Date(card.due_date).toLocaleDateString('pt-PT')}`
+          : undefined;
+        break;
+      }
+      case 'empty':
+        this.iconPath = new vscode.ThemeIcon('dash');
+        break;
+      case 'error':
+        this.iconPath = new vscode.ThemeIcon('error');
+        break;
+    }
+  }
+
+  private priorityIcon(priority: string): string {
+    switch (priority) {
+      case 'urgent': return 'error';
+      case 'high': return 'warning';
+      case 'medium': return 'tasklist';
+      default: return 'circle-outline';
+    }
+  }
+}
+
+export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<AnturioTreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+  private projectsCache: Project[] = [];
+  private projectDataCache = new Map<number, { columns: Column[]; cards: Card[] }>();
+
+  refresh(): void {
+    this.projectsCache = [];
+    this.projectDataCache.clear();
+    this._onDidChangeTreeData.fire();
+  }
+
+  getTreeItem(element: AnturioTreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  async getChildren(element?: AnturioTreeItem): Promise<AnturioTreeItem[]> {
+    if (!boardsClient.isConfigured()) return [];
+
+    if (!element) return this.loadProjects();
+    if (element.itemType === 'project') return this.loadColumns(element.data as Project);
+    if (element.itemType === 'column') return this.loadCards(element.data as Column, element.projectId!);
+    return [];
+  }
+
+  private async loadProjects(): Promise<AnturioTreeItem[]> {
+    try {
+      this.projectsCache = await boardsClient.getProjects();
+
+      if (this.projectsCache.length === 0) {
+        return [new AnturioTreeItem('Sem projetos', vscode.TreeItemCollapsibleState.None, 'empty')];
+      }
+
+      return this.projectsCache.map(
+        (p) => new AnturioTreeItem(p.title, vscode.TreeItemCollapsibleState.Collapsed, 'project', p),
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+      return [new AnturioTreeItem(`Erro: ${msg}`, vscode.TreeItemCollapsibleState.None, 'error')];
+    }
+  }
+
+  private async loadColumns(project: Project): Promise<AnturioTreeItem[]> {
+    await this.ensureProjectData(project.id);
+    const cached = this.projectDataCache.get(project.id);
+    if (!cached) return [];
+
+    return cached.columns.map(
+      (col) =>
+        new AnturioTreeItem(
+          col.title,
+          vscode.TreeItemCollapsibleState.Collapsed,
+          'column',
+          col,
+          project.id,
+        ),
+    );
+  }
+
+  private async loadCards(column: Column, projectId: number): Promise<AnturioTreeItem[]> {
+    await this.ensureProjectData(projectId);
+    const cached = this.projectDataCache.get(projectId);
+    if (!cached) return [];
+
+    const cards = cached.cards.filter((c) => c.status === column.id);
+
+    if (cards.length === 0) {
+      return [new AnturioTreeItem('Sem cards', vscode.TreeItemCollapsibleState.None, 'empty')];
+    }
+
+    return cards.map((card) => {
+      const item = new AnturioTreeItem(
+        card.title,
+        vscode.TreeItemCollapsibleState.None,
+        'card',
+        card,
+        projectId,
+      );
+      item.command = { command: 'anturio.openCard', title: 'Abrir Card', arguments: [card] };
+      return item;
+    });
+  }
+
+  private async ensureProjectData(projectId: number): Promise<void> {
+    if (this.projectDataCache.has(projectId)) return;
+    try {
+      const data = await boardsClient.getProjectCards(projectId);
+      this.projectDataCache.set(projectId, { columns: data.columns, cards: data.cards });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro';
+      vscode.window.showErrorMessage(`Erro ao carregar projeto: ${msg}`);
+    }
+  }
+
+  getProjects(): Project[] {
+    return this.projectsCache;
+  }
+
+  getProjectData(projectId: number): { columns: Column[]; cards: Card[] } | undefined {
+    return this.projectDataCache.get(projectId);
+  }
+}
