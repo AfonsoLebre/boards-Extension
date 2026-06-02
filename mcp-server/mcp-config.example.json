@@ -1,0 +1,46 @@
+{
+  "_comment": "Copia o bloco 'anturio-boards' para o teu ficheiro de configuração MCP.",
+
+  "claude_code": {
+    "_file": "~/.claude/settings.json  (ou .claude/settings.json na raiz do projeto)",
+    "mcpServers": {
+      "anturio-boards": {
+        "command": "node",
+        "args": ["CAMINHO_ABSOLUTO/mcp-server/dist/index.js"],
+        "env": {
+          "ANTURIO_API_KEY": "ant_A_TUA_CHAVE_AQUI",
+          "ANTURIO_SERVER_URL": "http://localhost:3000"
+        }
+      }
+    }
+  },
+
+  "cursor": {
+    "_file": "~/.cursor/mcp.json  (ou .cursor/mcp.json na raiz do projeto)",
+    "mcpServers": {
+      "anturio-boards": {
+        "command": "node",
+        "args": ["CAMINHO_ABSOLUTO/mcp-server/dist/index.js"],
+        "env": {
+          "ANTURIO_API_KEY": "ant_A_TUA_CHAVE_AQUI",
+          "ANTURIO_SERVER_URL": "http://localhost:3000"
+        }
+      }
+    }
+  },
+
+  "vscode_copilot": {
+    "_file": ".vscode/mcp.json  (na raiz do projeto)",
+    "servers": {
+      "anturio-boards": {
+        "type": "stdio",
+        "command": "node",
+        "args": ["CAMINHO_ABSOLUTO/mcp-server/dist/index.js"],
+        "env": {
+          "ANTURIO_API_KEY": "ant_A_TUA_CHAVE_AQUI",
+          "ANTURIO_SERVER_URL": "http://localhost:3000"
+        }
+      }
+    }
+  }
+}
