@@ -4,13 +4,17 @@
   "description": "Integração do Anturio Boards no VS Code — gere tarefas, sincroniza com git e usa AI diretamente no editor",
   "version": "0.1.0",
   "publisher": "anturio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AfonsoLebre/boards-Extension.git"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
   "main": "./out/extension.js",
-  "icon": "media/icon.png",
   "contributes": {
     "configuration": {
       "title": "Anturio Boards",

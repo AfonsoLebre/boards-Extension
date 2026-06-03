@@ -7,3 +7,5 @@ src/**
 **/*.ts
 !out/**
 node_modules/**
+mcp-server/node_modules/**
+mcp-server/src/**
