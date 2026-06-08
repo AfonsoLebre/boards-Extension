@@ -11,6 +11,7 @@ import { linkCommitCommand, setupGitPostCommitHook } from './commands/linkCommit
 import { aiSuggestCardCommand } from './ai/aiAssistant';
 import { startMcpHttpCommand, stopMcpHttpCommand, getTunnelUrl } from './commands/mcpProxy';
 import { moveCardCommand } from './commands/moveCard';
+import { editCardCommand } from './commands/editCard';
 import { Card } from './api/boardsClient';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -74,6 +75,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('anturio.moveCard', (item) => {
       if (item?.data) moveCardCommand(item.data as Card);
+    }),
+
+    vscode.commands.registerCommand('anturio.editCard', (item) => {
+      if (item?.data) editCardCommand(item.data as Card);
     }),
 
     vscode.commands.registerCommand('anturio.signOut', async () => {
