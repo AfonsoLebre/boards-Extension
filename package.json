@@ -12,8 +12,12 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
@@ -122,6 +126,18 @@
       {
         "command": "anturio.signOut",
         "title": "Anturio: Terminar Sessão"
+      },
+      {
+        "command": "anturio.startMcpHttp",
+        "title": "Anturio: Iniciar MCP HTTP (para Blackbox)"
+      },
+      {
+        "command": "anturio.stopMcpHttp",
+        "title": "Anturio: Parar MCP HTTP"
+      },
+      {
+        "command": "anturio.getMcpUrl",
+        "title": "Anturio: Copiar URL do Túnel MCP"
       }
     ],
     "menus": {
@@ -176,6 +192,7 @@
     "typescript": "^5.3.0"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0"
+    "@anthropic-ai/sdk": "^0.27.0",
+    "localtunnel": "^2.0.2"
   }
 }

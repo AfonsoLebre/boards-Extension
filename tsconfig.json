@@ -10,7 +10,9 @@
     "noImplicitAny": true,
     "moduleResolution": "node16",
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true
   },
-  "exclude": ["node_modules", ".vscode-test", "mcp-server"]
+  "exclude": ["node_modules", ".vscode-test", "mcp-server"],
+  "include": ["src", "src/types"]
 }

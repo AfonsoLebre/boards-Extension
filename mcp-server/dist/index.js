@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
+import express from 'express';
 import { listProjects, getProjectCards, createCard } from './api.js';
-const server = new Server({ name: 'anturio-boards', version: '0.1.0' }, { capabilities: { tools: {} } });
+const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
+const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
+const server = new Server({ name: 'anturio-boards', version: '0.1.0' }, { capabilities: { tools: {}, logging: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
         {
@@ -149,8 +153,25 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     }
 });
 async function main() {
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    if (TRANSPORT === 'http') {
+        const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => crypto.randomUUID(),
+        });
+        const app = express();
+        app.use(express.json());
+        app.post('/mcp', (req, res) => transport.handleRequest(req, res, req.body));
+        app.get('/sse', (req, res) => transport.handleRequest(req, res));
+        app.get('/', (_req, res) => {
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('Anturio Boards MCP Server — POST to /mcp');
+        });
+        const server = app.listen(PORT, () => console.error(`Anturio Boards MCP running on http://localhost:${PORT}/mcp`));
+        await new Promise((resolve) => server.on('close', resolve));
+    }
+    else {
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+    }
 }
 main().catch((err) => {
     process.stderr.write(`Erro fatal: ${err}\n`);

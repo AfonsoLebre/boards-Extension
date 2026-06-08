@@ -2,20 +2,26 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { spawn, ChildProcess } from 'child_process';
 import { boardsClient } from './api/boardsClient';
 import { BoardsProvider } from './views/BoardsProvider';
 import { CardDetailPanel } from './views/CardDetailPanel';
 import { createCardCommand, createCardFromSelectionCommand } from './commands/createCard';
 import { linkCommitCommand, setupGitPostCommitHook } from './commands/linkCommit';
 import { aiSuggestCardCommand } from './ai/aiAssistant';
+import { startMcpHttpCommand, stopMcpHttpCommand, getTunnelUrl } from './commands/mcpProxy';
 import { Card } from './api/boardsClient';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  console.log('[Anturio] Extension activating...');
   const provider = new BoardsProvider();
 
   const authenticated = await updateAuthContext();
+  console.log('[Anturio] Authenticated:', authenticated);
   if (authenticated) {
+    console.log('[Anturio] Starting MCP server...');
     await setupMcpConfig(context);
+    startMcpServer(context);
   }
 
   context.subscriptions.push(
@@ -23,7 +29,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (e.affectsConfiguration('anturio.apiKey') || e.affectsConfiguration('anturio.serverUrl')) {
         const ok = await updateAuthContext();
         provider.refresh();
-        if (ok) await setupMcpConfig(context);
+        if (ok) {
+          await setupMcpConfig(context);
+          startMcpServer(context);
+        }
       }
     }),
   );
@@ -67,9 +76,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         .getConfiguration('anturio')
         .update('apiKey', '', vscode.ConfigurationTarget.Global);
       removeMcpConfig();
+      mcpProcess?.kill();
+      mcpProcess = null;
       await updateAuthContext();
       provider.refresh();
       vscode.window.showInformationMessage('Sessão do Anturio terminada.');
+    }),
+
+    vscode.commands.registerCommand('anturio.startMcpHttp', () => startMcpHttpCommand()),
+    vscode.commands.registerCommand('anturio.stopMcpHttp', () => stopMcpHttpCommand()),
+    vscode.commands.registerCommand('anturio.getMcpUrl', async () => {
+      const url = getTunnelUrl();
+      if (url) {
+        await vscode.env.clipboard.writeText(url);
+        vscode.window.showInformationMessage(`URL: ${url} (copiada)`);
+      } else {
+        vscode.window.showWarningMessage('O túnel MCP não está ativo. Usa "Iniciar MCP HTTP" primeiro.');
+      }
     }),
   );
 
@@ -81,14 +104,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 }
 
-async function setupMcpConfig(context: vscode.ExtensionContext): Promise<void> {
+async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpServerPath: string; mcpEntry: object } | null> {
   const config = vscode.workspace.getConfiguration('anturio');
   const apiKey = config.get<string>('apiKey', '');
   const serverUrl = config.get<string>('serverUrl', 'http://localhost:3000');
 
   const mcpServerPath = path.join(context.extensionPath, '..', 'mcp-server', 'dist', 'index.js');
 
-  if (!fs.existsSync(mcpServerPath)) return;
+  if (!fs.existsSync(mcpServerPath)) return null;
 
   const mcpEntry = {
     command: 'node',
@@ -111,6 +134,74 @@ async function setupMcpConfig(context: vscode.ExtensionContext): Promise<void> {
     const projectClaude = path.join(workspaceFolders[0].uri.fsPath, '.claude', 'settings.json');
     writeMcpToFile(projectClaude, mcpEntry);
   }
+
+  return { mcpServerPath, mcpEntry: { command: 'node', args: [mcpServerPath], env: { ANTURIO_API_KEY: apiKey, ANTURIO_SERVER_URL: serverUrl } } };
+}
+
+let mcpProcess: ChildProcess | null = null;
+
+function startMcpServer(context: vscode.ExtensionContext): void {
+  console.log('[MCP] extensionPath:', context.extensionPath);
+
+  // Try parent first (for development where extensionPath is out/)
+  const parentMcpPath = path.join(context.extensionPath, '..', 'mcp-server', 'dist', 'index.js');
+  const siblingMcpPath = path.join(context.extensionPath, 'mcp-server', 'dist', 'index.js');
+
+  console.log('[MCP] Trying paths:', parentMcpPath, siblingMcpPath);
+  console.log('[MCP] Parent exists:', fs.existsSync(parentMcpPath));
+  console.log('[MCP] Sibling exists:', fs.existsSync(siblingMcpPath));
+
+  const mcpServerPath = fs.existsSync(parentMcpPath)
+    ? parentMcpPath
+    : fs.existsSync(siblingMcpPath)
+      ? siblingMcpPath
+      : null;
+
+  if (!mcpServerPath) {
+    console.error('[MCP] Could not find mcp-server at:', parentMcpPath, 'or', siblingMcpPath);
+    return;
+  }
+
+  const config = vscode.workspace.getConfiguration('anturio');
+  const apiKey = config.get<string>('apiKey', '');
+  const serverUrl = config.get<string>('serverUrl', 'http://localhost:3000');
+
+  // Se já houver um processo, mata
+  if (mcpProcess) {
+    mcpProcess.kill();
+    mcpProcess = null;
+  }
+
+  mcpProcess = spawn('node', [mcpServerPath], {
+    env: {
+      ...process.env,
+      ANTURIO_API_KEY: apiKey,
+      ANTURIO_SERVER_URL: serverUrl,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  mcpProcess.stdout?.on('data', (data) => {
+    const msg = data.toString().trim();
+    if (msg) console.log(`[MCP] ${msg}`);
+  });
+
+  mcpProcess.stderr?.on('data', (data) => {
+    console.error(`[MCP Error] ${data.toString().trim()}`);
+  });
+
+  mcpProcess.on('error', (err) => {
+    console.error(`[MCP Process Error] ${err.message}`);
+  });
+
+  mcpProcess.on('exit', (code) => {
+    if (code !== 0) {
+      console.error(`[MCP] Process exited with code ${code}`);
+    }
+    mcpProcess = null;
+  });
+
+  context.subscriptions.push({ dispose: () => mcpProcess?.kill() });
 }
 
 function writeMcpToFile(
@@ -176,4 +267,6 @@ async function updateAuthContext(): Promise<boolean> {
   return isAuthenticated;
 }
 
-export function deactivate(): void {}
+export function deactivate(): void {
+  mcpProcess?.kill();
+}
