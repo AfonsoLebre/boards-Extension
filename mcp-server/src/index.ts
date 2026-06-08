@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard } from './api.js';
 
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
@@ -63,6 +63,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           due_date: { type: 'string', description: 'Data limite no formato YYYY-MM-DD (opcional)' },
         },
         required: ['project_id', 'title'],
+      },
+    },
+    {
+      name: 'move_card',
+      description: 'Move um card para outra coluna. Usa get_project_cards para ver os IDs das colunas.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do card a mover' },
+          column_id: { type: 'string', description: 'ID da coluna de destino' },
+        },
+        required: ['card_id', 'column_id'],
       },
     },
   ],
@@ -179,6 +191,17 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           content: [{
             type: 'text',
             text: `✅ Card criado: **${card.title}** (ID: ${card.id}) em *${card.status_label}*`,
+          }],
+        };
+      }
+
+      case 'move_card': {
+        const a = args as { card_id: number; column_id: string };
+        const card = await moveCard(a.card_id, a.column_id);
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ Card movido: **${card.title}** (ID: ${card.id}) para *${card.status_label}*`,
           }],
         };
       }

@@ -124,6 +124,10 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "anturio.moveCard",
+        "title": "Mover Card"
+      },
+      {
         "command": "anturio.signOut",
         "title": "Anturio: Terminar Sessão"
       },
@@ -165,6 +169,11 @@
           "command": "anturio.viewCardDetails",
           "when": "viewItem == card",
           "group": "inline"
+        },
+        {
+          "command": "anturio.moveCard",
+          "when": "viewItem == card",
+          "group": "navigation@1"
         }
       ]
     },

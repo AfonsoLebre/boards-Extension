@@ -74,3 +74,7 @@ export async function createCard(
 ): Promise<Card> {
   return request<Card>('POST', `/api/v1/projects/${projectId}/cards`, payload);
 }
+
+export async function moveCard(cardId: number, columnId: string): Promise<Card> {
+  return request<Card>('PATCH', `/api/v1/cards/${cardId}`, { columnId });
+}
