@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextprotocol/sdk/types.js';
 import express from 'express';
-import { listProjects, getProjectCards, createCard } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard } from './api.js';
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
 const server = new Server({ name: 'anturio-boards', version: '0.1.0' }, { capabilities: { tools: {}, logging: {} } });
@@ -53,6 +53,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
                     due_date: { type: 'string', description: 'Data limite no formato YYYY-MM-DD (opcional)' },
                 },
                 required: ['project_id', 'title'],
+            },
+        },
+        {
+            name: 'move_card',
+            description: 'Move um card para outra coluna. Usa get_project_cards para ver os IDs das colunas.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    card_id: { type: 'number', description: 'ID do card a mover' },
+                    column_id: { type: 'string', description: 'ID da coluna de destino' },
+                },
+                required: ['card_id', 'column_id'],
+            },
+        },
+        {
+            name: 'delete_card',
+            description: 'Apaga um card. Requer confirmação do utilizador — a AI deve perguntar antes de usar esta ferramenta.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    card_id: { type: 'number', description: 'ID do card a apagar' },
+                    confirm: { type: 'boolean', description: 'Deve ser true para confirmar a eliminação. A AI deve obter confirmação explícita do utilizador antes de definir como true.' },
+                },
+                required: ['card_id', 'confirm'],
             },
         },
     ],
@@ -140,6 +164,35 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
                     content: [{
                             type: 'text',
                             text: `✅ Card criado: **${card.title}** (ID: ${card.id}) em *${card.status_label}*`,
+                        }],
+                };
+            }
+            case 'move_card': {
+                const a = args;
+                const card = await moveCard(a.card_id, a.column_id);
+                return {
+                    content: [{
+                            type: 'text',
+                            text: `✅ Card movido: **${card.title}** (ID: ${card.id}) para *${card.status_label}*`,
+                        }],
+                };
+            }
+            case 'delete_card': {
+                const a = args;
+                if (!a.confirm) {
+                    return {
+                        content: [{
+                                type: 'text',
+                                text: '⚠️ Confirmação necessária: vais apagar um card. Para confirmar, define confirm: true.',
+                                isError: true,
+                            }],
+                    };
+                }
+                await deleteCard(a.card_id);
+                return {
+                    content: [{
+                            type: 'text',
+                            text: `🗑️ Card apagado (ID: ${a.card_id})`,
                         }],
                 };
             }

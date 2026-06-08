@@ -12,6 +12,7 @@ import { aiSuggestCardCommand } from './ai/aiAssistant';
 import { startMcpHttpCommand, stopMcpHttpCommand, getTunnelUrl } from './commands/mcpProxy';
 import { moveCardCommand } from './commands/moveCard';
 import { editCardCommand } from './commands/editCard';
+import { deleteCardCommand } from './commands/deleteCard';
 import { Card } from './api/boardsClient';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -79,6 +80,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('anturio.editCard', (item) => {
       if (item?.data) editCardCommand(item.data as Card);
+    }),
+
+    vscode.commands.registerCommand('anturio.deleteCard', async (item) => {
+      if (item?.data) await deleteCardCommand(item.data as Card);
     }),
 
     vscode.commands.registerCommand('anturio.signOut', async () => {

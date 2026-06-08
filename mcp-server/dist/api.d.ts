@@ -40,3 +40,5 @@ export declare function createCard(projectId: number, payload: {
     priority?: string;
     due_date?: string;
 }): Promise<Card>;
+export declare function moveCard(cardId: number, columnId: string): Promise<Card>;
+export declare function deleteCard(cardId: number): Promise<void>;

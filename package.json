@@ -132,6 +132,10 @@
         "title": "Editar Card"
       },
       {
+        "command": "anturio.deleteCard",
+        "title": "Apagar Card"
+      },
+      {
         "command": "anturio.signOut",
         "title": "Anturio: Terminar Sessão"
       },
@@ -183,6 +187,11 @@
           "command": "anturio.editCard",
           "when": "viewItem == card",
           "group": "navigation@2"
+        },
+        {
+          "command": "anturio.deleteCard",
+          "when": "viewItem == card",
+          "group": "navigation@3"
         }
       ]
     },

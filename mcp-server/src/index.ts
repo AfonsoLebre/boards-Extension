@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard, moveCard } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard } from './api.js';
 
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
@@ -75,6 +75,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           column_id: { type: 'string', description: 'ID da coluna de destino' },
         },
         required: ['card_id', 'column_id'],
+      },
+    },
+    {
+      name: 'delete_card',
+      description: 'Apaga um card. Requer confirmação do utilizador — a AI deve perguntar antes de usar esta ferramenta.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do card a apagar' },
+          confirm: { type: 'boolean', description: 'Deve ser true para confirmar a eliminação. A AI deve obter confirmação explícita do utilizador antes de definir como true.' },
+        },
+        required: ['card_id', 'confirm'],
       },
     },
   ],
@@ -202,6 +214,26 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           content: [{
             type: 'text',
             text: `✅ Card movido: **${card.title}** (ID: ${card.id}) para *${card.status_label}*`,
+          }],
+        };
+      }
+
+      case 'delete_card': {
+        const a = args as { card_id: number; confirm: boolean };
+        if (!a.confirm) {
+          return {
+            content: [{
+              type: 'text',
+              text: '⚠️ Confirmação necessária: vais apagar um card. Para confirmar, define confirm: true.',
+              isError: true,
+            }],
+          };
+        }
+        await deleteCard(a.card_id);
+        return {
+          content: [{
+            type: 'text',
+            text: `🗑️ Card apagado (ID: ${a.card_id})`,
           }],
         };
       }

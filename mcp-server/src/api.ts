@@ -78,3 +78,7 @@ export async function createCard(
 export async function moveCard(cardId: number, columnId: string): Promise<Card> {
   return request<Card>('PATCH', `/api/v1/cards/${cardId}`, { columnId });
 }
+
+export async function deleteCard(cardId: number): Promise<void> {
+  await request<void>('DELETE', `/api/v1/cards/${cardId}`);
+}

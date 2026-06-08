@@ -135,6 +135,10 @@ export class BoardsClient {
     return this.request<LinkCommitResponse>('POST', `/api/v1/cards/${cardId}/commits`, { commitHash });
   }
 
+  async deleteCard(cardId: number): Promise<void> {
+    await this.request<void>('DELETE', `/api/v1/cards/${cardId}`);
+  }
+
   async validateApiKey(): Promise<boolean> {
     try {
       await this.request<unknown>('GET', '/api/v1/projects');

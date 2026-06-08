@@ -29,3 +29,9 @@ export async function getProjectCards(projectId) {
 export async function createCard(projectId, payload) {
     return request('POST', `/api/v1/projects/${projectId}/cards`, payload);
 }
+export async function moveCard(cardId, columnId) {
+    return request('PATCH', `/api/v1/cards/${cardId}`, { columnId });
+}
+export async function deleteCard(cardId) {
+    await request('DELETE', `/api/v1/cards/${cardId}`);
+}
