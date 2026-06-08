@@ -67,6 +67,16 @@ export interface LinkCommitResponse {
   commit_hash: string;
 }
 
+export interface Comment {
+  id: number;
+  task_id: string;
+  user_email: string;
+  user_name: string;
+  type: string;
+  content: string;
+  created_at: string;
+}
+
 export class BoardsApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -137,6 +147,10 @@ export class BoardsClient {
 
   async deleteCard(cardId: number): Promise<void> {
     await this.request<void>('DELETE', `/api/v1/cards/${cardId}`);
+  }
+
+  async getComments(cardId: number): Promise<Comment[]> {
+    return this.request<Comment[]>('GET', `/api/tarefas/${cardId}/activities`);
   }
 
   async validateApiKey(): Promise<boolean> {
