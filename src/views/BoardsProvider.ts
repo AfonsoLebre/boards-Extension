@@ -95,18 +95,62 @@ export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> 
     },
 
     handleDrop: async (target: AnturioTreeItem | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken) => {
-      if (!target || target.itemType !== 'column' || !draggingCardData) return;
+      if (!target || !draggingCardData) return;
+      if (target.itemType !== 'column' && target.itemType !== 'card') return;
 
-      const card = this.projectDataCache.get(draggingCardData!.projectId)?.cards.find(c => c.id === draggingCardData!.cardId);
-      if (!card) return;
+      const projectId = target.projectId || draggingCardData.projectId;
+      const projectData = this.projectDataCache.get(projectId);
+      if (!projectData) return;
 
-      const column = target.data as Column;
-      if (card.status === column.id) return;
+      const sourceCard = projectData.cards.find(c => c.id === draggingCardData!.cardId);
+      if (!sourceCard) return;
+
+      let targetColumnId: string;
+      let targetCard: Card | undefined;
+
+      if (target.itemType === 'column') {
+        targetColumnId = (target.data as Column).id;
+        targetCard = undefined;
+      } else {
+        targetCard = target.data as Card;
+        targetColumnId = targetCard.status;
+      }
+
+      // Se é um cartão, não pode ser sobre si mesmo
+      if (targetCard && targetCard.id === sourceCard.id) return;
+
+      // Obter todos os cartões da coluna destino, ordenados
+      const colCards = projectData.cards
+        .filter(c => c.status === targetColumnId)
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      // Remover o cartão de origem se estiver na mesma coluna
+      const otherCards = colCards.filter(c => c.id !== sourceCard.id);
+
+      if (targetCard) {
+        // Inserir DEPOIS do cartão alvo
+        const targetIndex = otherCards.findIndex(c => c.id === targetCard!.id);
+        otherCards.splice(targetIndex + 1, 0, sourceCard);
+      } else {
+        // É numa coluna vazia - adicionar no início
+        otherCards.unshift(sourceCard);
+      }
+
+      // Se mudou de coluna, atualizar status do sourceCard
+      if (sourceCard.status !== targetColumnId) {
+        sourceCard.status = targetColumnId;
+      }
 
       try {
-        await boardsClient.updateCard(card.id, { columnId: column.id });
+        const updates = otherCards.map((c, index) => ({
+          id: c.id,
+          status: c.status,
+          order: index,
+        }));
+
+        await boardsClient.batchUpdateCards(updates);
         vscode.commands.executeCommand('anturio.refresh');
-        vscode.window.showInformationMessage(`Card movido para "${column.title}"`);
+        vscode.window.showInformationMessage('Cartão movido');
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Erro';
         vscode.window.showErrorMessage(`Erro ao mover card: ${msg}`);

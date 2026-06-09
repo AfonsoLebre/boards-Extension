@@ -35,6 +35,7 @@ export interface Card {
   due_date?: string;
   members: CardMember[];
   labels: CardLabel[];
+  order?: number;
 }
 
 export interface ProjectCardsResponse {
@@ -139,6 +140,10 @@ export class BoardsClient {
 
   async updateCard(cardId: number, payload: UpdateCardPayload): Promise<Card> {
     return this.request<Card>('PATCH', `/api/v1/cards/${cardId}`, payload);
+  }
+
+  async batchUpdateCards(updates: { id: number; status?: string; order?: number }[]): Promise<void> {
+    await this.request<void>('POST', '/api/tarefas/batch-update', { updates });
   }
 
   async linkCommitToCard(cardId: number, commitHash: string): Promise<LinkCommitResponse> {
