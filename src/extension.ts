@@ -18,6 +18,11 @@ import { Card } from './api/boardsClient';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   console.log('[Anturio] Extension activating...');
+
+  // Track clicks for double-click detection
+  let lastOpenTime = 0;
+  let lastOpenCardId = 0;
+
   const provider = new BoardsProvider();
 
   const authenticated = await updateAuthContext();
@@ -71,8 +76,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('anturio.linkCommit', () => linkCommitCommand()),
     vscode.commands.registerCommand('anturio.aiSuggestCard', aiSuggestCardCommand),
 
-    vscode.commands.registerCommand('anturio.openCard', (card: Card) => {
-      CardDetailPanel.show(card);
+    vscode.commands.registerCommand('anturio.openCard', async (card: Card) => {
+      const now = Date.now();
+      if (now - lastOpenTime < 400 && lastOpenCardId === card.id) {
+        // Double click - edit title
+        lastOpenTime = 0;
+        lastOpenCardId = 0;
+        if (!boardsClient.isConfigured()) {
+          vscode.window.showErrorMessage('Anturio: API Key não configurada.');
+          return;
+        }
+        const newTitle = await vscode.window.showInputBox({
+          prompt: 'Novo título do card',
+          value: card.title,
+          ignoreFocusOut: true,
+        });
+        if (!newTitle || newTitle === card.title) return;
+        try {
+          await boardsClient.updateCard(card.id, { title: newTitle });
+          vscode.window.showInformationMessage(`Título alterado para "${newTitle}"`);
+          vscode.commands.executeCommand('anturio.refresh');
+        } catch (err) {
+          vscode.window.showErrorMessage(`Anturio: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+        }
+      } else {
+        // Single click - open panel
+        lastOpenTime = now;
+        lastOpenCardId = card.id;
+        CardDetailPanel.show(card);
+      }
     }),
 
     vscode.commands.registerCommand('anturio.viewCardDetails', (item) => {

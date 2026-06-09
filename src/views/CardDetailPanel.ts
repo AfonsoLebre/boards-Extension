@@ -24,6 +24,20 @@ export class CardDetailPanel {
     this.loadComments(card.id);
     this.panel.webview.html = this.buildHtml(card, []);
     this.panel.onDidDispose(() => CardDetailPanel.panels.delete(card.id));
+    this.panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
+  }
+
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string }): Promise<void> {
+    if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
+      try {
+        const updated = await boardsClient.updateCard(msg.cardId, { title: msg.title });
+        this.card.title = updated.title;
+        this.panel.title = updated.title;
+        this.panel.webview.postMessage({ command: 'updateCardTitleSuccess', title: updated.title });
+      } catch (err) {
+        console.error('Erro ao actualizar título:', err);
+      }
+    }
   }
 
   static show(card: Card): void {
@@ -157,10 +171,18 @@ export class CardDetailPanel {
     #image-modal.active { display: flex; }
     #image-modal img { max-width: 90%; max-height: 90%; border-radius: 8px; }
     #image-modal .close { position: absolute; top: 20px; right: 30px; color: #fff; font-size: 40px; cursor: pointer; }
+    .card-title { cursor: pointer; border-radius: 4px; padding: 4px 8px; margin: -4px -8px; transition: background 0.2s; }
+    .card-title:hover { background: var(--vscode-textBlockQuote-background); }
+    .card-title-input { font-family: var(--vscode-font-family); font-size: 1.3em; font-weight: bold; width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 2px solid var(--vscode-focusBorder); border-radius: 4px; padding: 4px 8px; margin: -6px -10px; }
+    .card-title-input:focus { outline: none; }
+    .save-hint { color: var(--vscode-descriptionForeground); font-size: 0.7em; margin-left: 8px; opacity: 0; transition: opacity 0.2s; }
+    .card-title-input:focus + .save-hint { opacity: 1; }
   </style>
 </head>
 <body>
-  <h1>${this.escape(card.title)}</h1>
+  <h1 class="card-title" id="card-title" ondblclick="window.startEditTitle()">${this.escape(card.title)}</h1>
+  <input type="text" id="title-input" class="card-title-input" style="display:none;" value="${this.escape(card.title)}">
+  <span class="save-hint">Enter para guardar | Esc para cancelar</span>
   <div class="status">${this.escape(card.status_label)}</div>
   <div class="priority">${PRIORITY_LABELS[card.priority] ?? card.priority}</div>
   ${dates}
@@ -208,6 +230,78 @@ export class CardDetailPanel {
       });
     }
     processImages();
+
+    // Edição inline do título
+    window.startEditTitle = function() {
+      var titleEl = document.getElementById('card-title');
+      var inputEl = document.getElementById('title-input');
+      if (titleEl && inputEl) {
+        titleEl.style.display = 'none';
+        inputEl.style.display = 'block';
+        inputEl.focus();
+        inputEl.select();
+      }
+    };
+    window.saveTitle = function() {
+      var inputEl = document.getElementById('title-input');
+      var titleEl = document.getElementById('card-title');
+      if (inputEl && titleEl) {
+        var newTitle = inputEl.value.trim();
+        if (newTitle && newTitle !== titleEl.textContent) {
+          window.updateCardTitle(newTitle);
+        }
+        inputEl.style.display = 'none';
+        titleEl.style.display = 'block';
+      }
+    };
+    window.cancelEditTitle = function() {
+      var inputEl = document.getElementById('title-input');
+      var titleEl = document.getElementById('card-title');
+      if (inputEl && titleEl) {
+        inputEl.value = titleEl.textContent || '';
+        inputEl.style.display = 'none';
+        titleEl.style.display = 'block';
+      }
+    };
+    // Enter para guardar, Esc para cancelar
+    document.getElementById('title-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.saveTitle();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        window.cancelEditTitle();
+      }
+    });
+    document.getElementById('title-input').addEventListener('blur', function() {
+      // Pequeno delay para permitir clique no botão guardar
+      setTimeout(function() {
+        var inputEl = document.getElementById('title-input');
+        if (inputEl && inputEl.style.display !== 'none') {
+          window.saveTitle();
+        }
+      }, 200);
+    });
+    // Comunicar com a extensão para guardar o título
+    window.updateCardTitle = function(newTitle) {
+      vscode.postMessage({ command: 'updateCardTitle', cardId: window.cardId, title: newTitle });
+    };
+    window.updateCardTitleSuccess = function(newTitle) {
+      var titleEl = document.getElementById('card-title');
+      if (titleEl) {
+        titleEl.textContent = newTitle;
+      }
+    };
+    // Receber mensagens da extensão
+    window.addEventListener('message', function(event) {
+      var msg = event.data;
+      if (msg.command === 'updateCardTitleSuccess') {
+        window.updateCardTitleSuccess(msg.title);
+      }
+    });
+  </script>
+  <script>
+    window.cardId = ${card.id};
   </script>
   <div id="image-modal" onclick="window.closeModal()">
     <span class="close" onclick="window.closeModal()">&times;</span>
