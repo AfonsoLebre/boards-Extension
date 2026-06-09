@@ -7,7 +7,7 @@ import { boardsClient } from './api/boardsClient';
 import { BoardsProvider } from './views/BoardsProvider';
 import { CardDetailPanel } from './views/CardDetailPanel';
 import { BoardPanel } from './views/BoardPanel';
-import { createCardCommand, createCardFromSelectionCommand } from './commands/createCard';
+import { createCardCommand, createCardFromSelectionCommand, createCardInColumnCommand } from './commands/createCard';
 import { linkCommitCommand, setupGitPostCommitHook } from './commands/linkCommit';
 import { aiSuggestCardCommand } from './ai/aiAssistant';
 import { startMcpHttpCommand, stopMcpHttpCommand, getTunnelUrl } from './commands/mcpProxy';
@@ -73,6 +73,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('anturio.createCard', createCardCommand),
     vscode.commands.registerCommand('anturio.createCardFromSelection', createCardFromSelectionCommand),
+    vscode.commands.registerCommand('anturio.createCardInColumn', (_item: { data: any; projectId?: number }) => {
+      if (_item?.data) {
+        const column = _item.data;
+        const projectId = _item.projectId;
+        if (projectId) createCardInColumnCommand(projectId, column.id);
+      }
+    }),
     vscode.commands.registerCommand('anturio.linkCommit', () => linkCommitCommand()),
     vscode.commands.registerCommand('anturio.aiSuggestCard', aiSuggestCardCommand),
 

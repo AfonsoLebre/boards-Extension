@@ -155,6 +155,10 @@
       {
         "command": "anturio.openBoard",
         "title": "Anturio: Abrir Board com Drag & Drop"
+      },
+      {
+        "command": "anturio.createCardInColumn",
+        "title": "Criar Card nesta Coluna"
       }
     ],
     "menus": {
@@ -197,6 +201,11 @@
           "command": "anturio.deleteCard",
           "when": "viewItem == card",
           "group": "navigation@3"
+        },
+        {
+          "command": "anturio.createCardInColumn",
+          "when": "viewItem == column",
+          "group": "navigation@1"
         }
       ]
     },

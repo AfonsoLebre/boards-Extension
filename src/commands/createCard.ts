@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { boardsClient, Project, Column, CreateCardPayload } from '../api/boardsClient';
+import { boardsClient, Project, Column, Card, CreateCardPayload } from '../api/boardsClient';
 
 async function pickProjectAndColumn(): Promise<{ project: Project; column?: Column } | undefined> {
   let projects: Project[];
@@ -100,6 +100,55 @@ export async function createCardCommand(): Promise<void> {
           const serverUrl = vscode.workspace.getConfiguration('anturio').get<string>('serverUrl', '');
           vscode.env.openExternal(vscode.Uri.parse(`${serverUrl}/projects/${picked.project.id}`));
         }
+        vscode.commands.executeCommand('anturio.refresh');
+      } catch (err) {
+        vscode.window.showErrorMessage(`Erro ao criar card: ${err instanceof Error ? err.message : err}`);
+      }
+    },
+  );
+}
+
+export async function createCardInColumnCommand(projectId: number, columnId: string): Promise<void> {
+  if (!boardsClient.isConfigured()) {
+    vscode.window.showErrorMessage('Configura a API Key do Anturio primeiro.');
+    return;
+  }
+
+  const title = await vscode.window.showInputBox({
+    prompt: 'Título do card',
+    placeHolder: 'Ex: Corrigir bug no botão de login',
+  });
+  if (!title) return;
+
+  const description = await vscode.window.showInputBox({
+    prompt: 'Descrição (opcional)',
+    placeHolder: 'Descreve a tarefa...',
+  });
+
+  const priorityItem = await vscode.window.showQuickPick(
+    [
+      { label: '🟢 Baixa', value: 'low' as const },
+      { label: '🟡 Média', value: 'medium' as const },
+      { label: '🟠 Alta', value: 'high' as const },
+      { label: '🔴 Urgente', value: 'urgent' as const },
+    ],
+    { placeHolder: 'Prioridade' },
+  );
+  if (!priorityItem) return;
+
+  const payload: CreateCardPayload = {
+    title,
+    description: description || undefined,
+    columnId: columnId,
+    priority: priorityItem.value,
+  };
+
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: 'Criando card...' },
+    async () => {
+      try {
+        const card = await boardsClient.createCard(projectId, payload);
+        vscode.window.showInformationMessage(`Card "${card.title}" criado`);
         vscode.commands.executeCommand('anturio.refresh');
       } catch (err) {
         vscode.window.showErrorMessage(`Erro ao criar card: ${err instanceof Error ? err.message : err}`);
