@@ -42,3 +42,12 @@ export declare function createCard(projectId: number, payload: {
 }): Promise<Card>;
 export declare function moveCard(cardId: number, columnId: string): Promise<Card>;
 export declare function deleteCard(cardId: number): Promise<void>;
+export interface CardComment {
+    id: number;
+    user_email: string;
+    user_name: string;
+    type: string;
+    content: string;
+    created_at: string;
+}
+export declare function getCardComments(cardId: number): Promise<CardComment[]>;

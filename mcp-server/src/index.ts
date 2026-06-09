@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard, moveCard, deleteCard } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments } from './api.js';
 
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
@@ -89,6 +89,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ['card_id', 'confirm'],
       },
     },
+    {
+      name: 'get_card_comments',
+      description: 'Mostra os comentários de um card. Usa get_project_cards para descobrir o ID do card.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do card' },
+        },
+        required: ['card_id'],
+      },
+    },
   ],
 }));
 
@@ -141,7 +152,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
               const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
               const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
               lines.push(`- ${priority} **${card.title}** (ID: ${card.id})${due}${members}`);
-              if (card.description) lines.push(`  _${card.description.slice(0, 100)}${card.description.length > 100 ? '…' : ''}_`);
+              if (card.description) lines.push(`  _${card.description.slice(0, 2000)}${card.description.length > 2000 ? '…' : ''}_`);
             }
           }
         }
@@ -236,6 +247,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             text: `🗑️ Card apagado (ID: ${a.card_id})`,
           }],
         };
+      }
+
+      case 'get_card_comments': {
+        const a = args as { card_id: number };
+        const comments = await getCardComments(a.card_id);
+        if (comments.length === 0) {
+          return { content: [{ type: 'text', text: 'Este card não tem comentários.' }] };
+        }
+        const lines = comments
+          .filter((c) => c.type === 'comment')
+          .map((c) => `**${c.user_name}** (${new Date(c.created_at).toLocaleString('pt-PT')}):\n${c.content}`);
+        return { content: [{ type: 'text', text: `**Comentários (${lines.length}):**\n\n${lines.join('\n\n')}` }] };
       }
 
       default:

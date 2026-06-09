@@ -35,3 +35,6 @@ export async function moveCard(cardId, columnId) {
 export async function deleteCard(cardId) {
     await request('DELETE', `/api/v1/cards/${cardId}`);
 }
+export async function getCardComments(cardId) {
+    return request('GET', `/api/tarefas/${cardId}/activities`);
+}

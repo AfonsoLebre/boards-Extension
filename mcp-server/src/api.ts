@@ -82,3 +82,16 @@ export async function moveCard(cardId: number, columnId: string): Promise<Card> 
 export async function deleteCard(cardId: number): Promise<void> {
   await request<void>('DELETE', `/api/v1/cards/${cardId}`);
 }
+
+export interface CardComment {
+  id: number;
+  user_email: string;
+  user_name: string;
+  type: string;
+  content: string;
+  created_at: string;
+}
+
+export async function getCardComments(cardId: number): Promise<CardComment[]> {
+  return request<CardComment[]>('GET', `/api/tarefas/${cardId}/activities`);
+}
