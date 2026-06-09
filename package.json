@@ -69,7 +69,8 @@
         {
           "id": "anturio.projectsView",
           "name": "Projetos",
-          "when": "anturio.authenticated"
+          "when": "anturio.authenticated",
+          "dragDrop": true
         },
         {
           "id": "anturio.welcomeView",
@@ -150,6 +151,10 @@
       {
         "command": "anturio.getMcpUrl",
         "title": "Anturio: Copiar URL do Túnel MCP"
+      },
+      {
+        "command": "anturio.openBoard",
+        "title": "Anturio: Abrir Board com Drag & Drop"
       }
     ],
     "menus": {

@@ -6,6 +6,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { boardsClient } from './api/boardsClient';
 import { BoardsProvider } from './views/BoardsProvider';
 import { CardDetailPanel } from './views/CardDetailPanel';
+import { BoardPanel } from './views/BoardPanel';
 import { createCardCommand, createCardFromSelectionCommand } from './commands/createCard';
 import { linkCommitCommand, setupGitPostCommitHook } from './commands/linkCommit';
 import { aiSuggestCardCommand } from './ai/aiAssistant';
@@ -40,8 +41,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
+  const projectsView = vscode.window.createTreeView('anturio.projectsView', {
+    treeDataProvider: provider,
+    dragAndDropController: provider.dragAndDropController,
+  });
+  context.subscriptions.push(projectsView);
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('anturio.projectsView', provider),
     vscode.window.registerTreeDataProvider('anturio.welcomeView', provider),
   );
 
@@ -108,6 +113,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } else {
         vscode.window.showWarningMessage('O túnel MCP não está ativo. Usa "Iniciar MCP HTTP" primeiro.');
       }
+    }),
+
+    vscode.commands.registerCommand('anturio.openBoard', () => {
+      BoardPanel.show(context.extensionUri);
     }),
   );
 

@@ -53,6 +53,9 @@ export class AnturioTreeItem extends vscode.TreeItem {
   }
 }
 
+// Global to store drag data between handleDrag and handleDrop
+let draggingCardData: { cardId: number; projectId: number } | null = null;
+
 export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> {
   private _onDidChangeTreeData = new vscode.EventEmitter<AnturioTreeItem | undefined | null | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -78,6 +81,39 @@ export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> 
     if (element.itemType === 'column') return this.loadCards(element.data as Column, element.projectId!);
     return [];
   }
+
+  // Drag & Drop support
+  readonly dragAndDropController: vscode.TreeDragAndDropController<AnturioTreeItem> = {
+    dragMimeTypes: ['application/vnd.code.tree.anturio-card'],
+    dropMimeTypes: ['application/vnd.code.tree.anturio-card'],
+
+    handleDrag: (source: readonly AnturioTreeItem[], dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken) => {
+      if (source.length === 0 || source[0].itemType !== 'card') return;
+      const card = source[0].data as Card;
+      const projectId = source[0].projectId!;
+      draggingCardData = { cardId: card.id, projectId };
+    },
+
+    handleDrop: async (target: AnturioTreeItem | undefined, dataTransfer: vscode.DataTransfer, token: vscode.CancellationToken) => {
+      if (!target || target.itemType !== 'column' || !draggingCardData) return;
+
+      const card = this.projectDataCache.get(draggingCardData!.projectId)?.cards.find(c => c.id === draggingCardData!.cardId);
+      if (!card) return;
+
+      const column = target.data as Column;
+      if (card.status === column.id) return;
+
+      try {
+        await boardsClient.updateCard(card.id, { columnId: column.id });
+        vscode.commands.executeCommand('anturio.refresh');
+        vscode.window.showInformationMessage(`Card movido para "${column.title}"`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Erro';
+        vscode.window.showErrorMessage(`Erro ao mover card: ${msg}`);
+      }
+      draggingCardData = null;
+    },
+  };
 
   private async loadProjects(): Promise<AnturioTreeItem[]> {
     try {
