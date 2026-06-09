@@ -12,6 +12,32 @@ import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCar
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
 
+// Limpa HTML das descrições para texto simples
+function cleanHtmlDescription(html: string): string {
+  if (!html) return '';
+  return html
+    // Substitui parágrafos e divs por quebras de linha
+    .replace(/<\/?(p|div|br)\s*\/?>/gi, '\n')
+    // Substitui cabeçalhos
+    .replace(/<\/?h[1-6][^>]*>/gi, '\n')
+    // Substitui listas
+    .replace(/<\/?(ul|li)\s*\/?>/gi, '\n')
+    // Remove todas as tags HTML
+    .replace(/<[^>]+>/g, '')
+    // Remove encoded characters
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Remove base64 images
+    .replace(/data:image\/[^;]+;base64,[^\s]*/gi, '[imagem]')
+    // Limpa múltiplas quebras de linha
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const server = new Server(
   { name: 'anturio-boards', version: '0.1.0' },
   { capabilities: { tools: {}, logging: {} } },
@@ -152,7 +178,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
               const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
               const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
               lines.push(`- ${priority} **${card.title}** (ID: ${card.id})${due}${members}`);
-              if (card.description) lines.push(`  _${card.description.slice(0, 2000)}${card.description.length > 2000 ? '…' : ''}_`);
+              if (card.description) lines.push(`  _${cleanHtmlDescription(card.description).slice(0, 2000)}${cleanHtmlDescription(card.description).length > 2000 ? '…' : ''}_`);
             }
           }
         }
