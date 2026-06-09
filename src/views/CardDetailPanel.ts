@@ -18,7 +18,7 @@ export class CardDetailPanel {
     this.panel = vscode.window.createWebviewPanel(
       'anturio.cardDetail',
       card.title,
-      vscode.ViewColumn.Beside,
+      vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true },
     );
     this.loadComments(card.id);
@@ -27,6 +27,7 @@ export class CardDetailPanel {
   }
 
   static show(card: Card): void {
+    // Se já existe, revela o painel existente
     if (CardDetailPanel.panels.has(card.id)) {
       CardDetailPanel.panels.get(card.id)!.panel.reveal();
       return;
