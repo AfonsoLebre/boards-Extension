@@ -126,7 +126,7 @@ Responde APENAS com JSON válido:
 
   const payload: CreateCardPayload = {
     title,
-    description: description || undefined,
+    descriptions: description ? [{ id: Date.now(), title: 'Descrição', content: description }] : undefined,
     columnId,
     priority,
   };

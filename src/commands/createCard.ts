@@ -82,7 +82,7 @@ export async function createCardCommand(): Promise<void> {
 
   const payload: CreateCardPayload = {
     title,
-    description: description || undefined,
+    descriptions: description ? [{ id: Date.now(), title: 'Descrição', content: description }] : undefined,
     columnId: picked.column?.id,
     priority: priorityItem.value,
   };
@@ -138,7 +138,7 @@ export async function createCardInColumnCommand(projectId: number, columnId: str
 
   const payload: CreateCardPayload = {
     title,
-    description: description || undefined,
+    descriptions: description ? [{ id: Date.now(), title: 'Descrição', content: description }] : undefined,
     columnId: columnId,
     priority: priorityItem.value,
   };
@@ -199,7 +199,7 @@ export async function createCardFromSelectionCommand(): Promise<void> {
 
   const payload: CreateCardPayload = {
     title,
-    description: description || undefined,
+    descriptions: description ? [{ id: Date.now(), title: 'Descrição', content: description }] : undefined,
     columnId: picked.column?.id,
     priority: 'medium',
   };

@@ -24,10 +24,17 @@ export interface CardLabel {
   color: string;
 }
 
+export interface CardDescription {
+  id: number;
+  title: string;
+  content: string;
+}
+
 export interface Card {
   id: number;
   title: string;
   description?: string;
+  descriptions?: CardDescription[];
   status: string;
   status_label: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
@@ -46,7 +53,7 @@ export interface ProjectCardsResponse {
 
 export interface CreateCardPayload {
   title: string;
-  description?: string;
+  descriptions?: { id: number; title: string; content: string }[];
   columnId?: string;
   priority?: Card['priority'];
   labels?: string[];

@@ -91,6 +91,22 @@ export class CardDetailPanel {
         </div>`
       : '';
 
+    // Obter descrição do array descriptions ou do campo description simples
+    const descriptionHtml = (() => {
+      // Primeiro verificar se há descrições no array
+      if (card.descriptions && card.descriptions.length > 0) {
+        const firstDesc = card.descriptions.find(d => d.content && d.content.trim());
+        if (firstDesc) {
+          return `<section><h3>Descrição</h3><div class="description" id="desc">${this.renderDescriptionWithImages(firstDesc.content)}</div></section>`;
+        }
+      }
+      // Fallback para campo description simples
+      if (card.description) {
+        return `<section><h3>Descrição</h3><div class="description" id="desc">${this.renderDescriptionWithImages(card.description)}</div></section>`;
+      }
+      return '';
+    })();
+
     const comments = activities.filter((a) => a.type === 'comment').reverse();
     const history = activities.filter((a) => a.type !== 'comment').reverse();
 
@@ -188,7 +204,7 @@ export class CardDetailPanel {
   <div class="priority">${PRIORITY_LABELS[card.priority] ?? card.priority}</div>
   ${dates}
   <div class="labels">${labels}</div>
-  ${card.description ? `<section><h3>Descrição</h3><div class="description" id="desc">${this.renderDescriptionWithImages(card.description)}</div></section>` : ''}
+  ${descriptionHtml}
   ${members}
   ${commentsHtml}
   ${historyHtml}
@@ -231,6 +247,9 @@ export class CardDetailPanel {
       });
     }
     processImages();
+
+    // Obter a API do VS Code para enviar mensagens
+    var vscode = acquireVsCodeApi();
 
     // Edição inline do título
     window.startEditTitle = function() {
