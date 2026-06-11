@@ -91,20 +91,30 @@ export class CardDetailPanel {
         </div>`
       : '';
 
-    // Obter descrição do array descriptions ou do campo description simples
+    // Obter todas as descrições do array descriptions ou do campo description simples
     const descriptionHtml = (() => {
+      const descriptions: { title: string; content: string }[] = [];
+
       // Primeiro verificar se há descrições no array
       if (card.descriptions && card.descriptions.length > 0) {
-        const firstDesc = card.descriptions.find(d => d.content && d.content.trim());
-        if (firstDesc) {
-          return `<section><h3>Descrição</h3><div class="description" id="desc">${this.renderDescriptionWithImages(firstDesc.content)}</div></section>`;
-        }
+        card.descriptions.forEach((d) => {
+          if (d.content && d.content.trim()) {
+            descriptions.push({ title: d.title || 'Descrição', content: d.content });
+          }
+        });
       }
-      // Fallback para campo description simples
-      if (card.description) {
-        return `<section><h3>Descrição</h3><div class="description" id="desc">${this.renderDescriptionWithImages(card.description)}</div></section>`;
+
+      // Fallback para campo description simples se não houver descrições no array
+      if (descriptions.length === 0 && card.description) {
+        descriptions.push({ title: 'Descrição', content: card.description });
       }
-      return '';
+
+      if (descriptions.length === 0) return '';
+
+      // Mostrar todas as descrições com os seus títulos
+      return descriptions.map((d) => {
+        return `<section><h3>${this.escape(d.title)}</h3><div class="description" id="desc">${this.renderDescriptionWithImages(d.content)}</div></section>`;
+      }).join('');
     })();
 
     const comments = activities.filter((a) => a.type === 'comment').reverse();
