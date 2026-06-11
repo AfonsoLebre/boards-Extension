@@ -135,15 +135,16 @@ export class CardDetailPanel {
   <meta http-equiv="Content-Security-Policy" content="img-src * data: blob:; default-src * 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval';">
   <title>${this.escape(card.title)}</title>
   <style>
-    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 24px; line-height: 1.6; max-width: 600px; }
-    h1 { font-size: 1.3em; margin-bottom: 6px; }
+    * { text-align: left; }
+    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 24px; line-height: 1.6; max-width: 600px; margin: 0; }
+    h1 { font-size: 1.3em; margin-bottom: 6px; margin-left: 0; padding-left: 0; }
     h3 { font-size: 0.9em; text-transform: uppercase; letter-spacing: .05em; color: var(--vscode-descriptionForeground); margin: 0 0 8px; }
     section { margin-top: 20px; border-top: 1px solid var(--vscode-panel-border); padding-top: 16px; }
     .label { border-radius: 4px; padding: 2px 8px; font-size: 0.8em; margin-right: 6px; color: #fff; }
     .labels { margin: 10px 0; }
     .meta { color: var(--vscode-descriptionForeground); font-size: 0.85em; }
-    .priority { font-size: 0.85em; margin: 4px 0; }
-    .status { display: inline-block; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 4px; padding: 2px 10px; font-size: 0.85em; margin: 4px 0; }
+    .status { display: block; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 4px; padding: 2px 10px; font-size: 0.85em; margin: 4px 0 0 0; margin-left: 0; width: max-content; }
+    .priority { font-size: 0.85em; margin: 4px 0 0 0; margin-left: 0; }
     .dates { display: flex; gap: 20px; font-size: 0.85em; margin-top: 8px; }
     ul { padding-left: 20px; margin: 0; }
     li { margin-bottom: 4px; }
