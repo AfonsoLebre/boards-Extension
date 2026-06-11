@@ -98,7 +98,7 @@ export class BoardsClient {
   }
 
   private get serverUrl(): string {
-    return this.config.get<string>('serverUrl', 'http://localhost:3001').replace(/\/$/, '');
+    return this.config.get<string>('serverUrl', 'http://localhost:3000').replace(/\/$/, '');
   }
 
   private get apiKey(): string {
@@ -114,7 +114,11 @@ export class BoardsClient {
       throw new BoardsApiError(401, 'API Key não configurada. Abre as definições do Anturio.');
     }
 
-    const response = await fetch(`${this.serverUrl}${path}`, {
+    const url = `${this.serverUrl}${path}`;
+    console.log(`[BoardsClient] 🔵 ${method} ${url}`);
+    if (body) console.log(`[BoardsClient] 📤 Body:`, JSON.stringify(body));
+
+    const response = await fetch(url, {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -124,12 +128,17 @@ export class BoardsClient {
       body: body ? JSON.stringify(body) : undefined,
     });
 
+    console.log(`[BoardsClient] 📥 Status: ${response.status}`);
+
     if (!response.ok) {
       const text = await response.text().catch(() => response.statusText);
+      console.error(`[BoardsClient] ❌ Erro ${response.status}: ${text}`);
       throw new BoardsApiError(response.status, text);
     }
 
-    return response.json() as Promise<T>;
+    const json = await response.json();
+    console.log(`[BoardsClient] 📥 Response:`, JSON.stringify(json));
+    return json as Promise<T>;
   }
 
   async getProjects(): Promise<Project[]> {
@@ -162,7 +171,15 @@ export class BoardsClient {
   }
 
   async getComments(cardId: number): Promise<Comment[]> {
-    return this.request<Comment[]>('GET', `/api/tarefas/${cardId}/activities`);
+    return this.request<Comment[]>('GET', `/server-api/api/tarefas/${cardId}/activities`);
+  }
+
+  async addComment(cardId: number, content: string): Promise<Comment> {
+    return this.request<Comment>('POST', '/server-api/api/activities', {
+      task_id: cardId.toString(),
+      type: 'comment',
+      content,
+    });
   }
 
   async validateApiKey(): Promise<boolean> {

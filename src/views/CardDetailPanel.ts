@@ -27,15 +27,27 @@ export class CardDetailPanel {
     this.panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string }): Promise<void> {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string }): Promise<void> {
     if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
       try {
+        console.log('[CardDetailPanel] Updating title for card:', msg.cardId);
         const updated = await boardsClient.updateCard(msg.cardId, { title: msg.title });
         this.card.title = updated.title;
         this.panel.title = updated.title;
         this.panel.webview.postMessage({ command: 'updateCardTitleSuccess', title: updated.title });
       } catch (err) {
-        console.error('Erro ao actualizar título:', err);
+        console.error('[CardDetailPanel] Erro ao actualizar título:', err);
+      }
+    } else if (msg.command === 'addComment' && msg.cardId && msg.content) {
+      try {
+        console.log('[CardDetailPanel] Adding comment to card:', msg.cardId, 'content:', msg.content);
+        const comment = await boardsClient.addComment(msg.cardId, msg.content);
+        console.log('[CardDetailPanel] Comment added:', comment);
+        this.panel.webview.postMessage({ command: 'commentAdded', comment });
+        this.loadComments(this.card.id);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao adicionar comentário:', err);
+        this.panel.webview.postMessage({ command: 'commentError', error: err instanceof Error ? err.message : String(err) });
       }
     }
   }
@@ -120,22 +132,26 @@ export class CardDetailPanel {
     const comments = activities.filter((a) => a.type === 'comment').reverse();
     const history = activities.filter((a) => a.type !== 'comment').reverse();
 
-    const commentsHtml = comments.length > 0
-      ? `<section>
-          <h3>Comentários (${comments.length})</h3>
-          <div class="comments">
-            ${comments.map((c) => `
-              <div class="comment">
-                <div class="comment-header">
-                  <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
-                  <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
-                </div>
-                <div class="comment-content">${this.renderHtml(c.content)}</div>
+    const commentsHtml = `
+      <section>
+        <h3>Comentários (${comments.length})</h3>
+        <div class="comments">
+          ${comments.length > 0 ? comments.map((c) => `
+            <div class="comment">
+              <div class="comment-header">
+                <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
+                <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
               </div>
-            `).join('')}
-          </div>
-        </section>`
-      : '<section><h3>Comentários</h3><p class="meta">Sem comentários ainda.</p></section>';
+              <div class="comment-content">${this.renderHtml(c.content)}</div>
+            </div>
+          `).join('') : '<p class="meta">Sem comentários ainda.</p>'}
+        </div>
+        <div class="add-comment">
+          <textarea id="new-comment" placeholder="Escreve um comentário..." rows="3"></textarea>
+          <button id="add-comment-btn" class="comment-button">Adicionar Comentário</button>
+        </div>
+      </section>
+    `;
 
     const historyHtml = history.length > 0
       ? `<section>
@@ -184,6 +200,12 @@ export class CardDetailPanel {
     .comment-author { font-weight: 600; color: var(--vscode-foreground); }
     .comment-date { color: var(--vscode-descriptionForeground); }
     .comment-content { white-space: pre-wrap; word-break: break-word; }
+    .add-comment { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--vscode-panel-border); }
+    .add-comment textarea { width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 60px; }
+    .add-comment textarea:focus { outline: none; border-color: var(--vscode-focusBorder); }
+    .add-comment button { margin-top: 8px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 12px; font-size: 0.85em; cursor: pointer; }
+    .add-comment button:hover { background: var(--vscode-button-hoverBackground); }
+    .add-comment button:disabled { opacity: 0.5; cursor: not-allowed; }
     .history { display: flex; flex-direction: column; gap: 8px; }
     .history-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
     .history-icon { font-size: 0.9em; }
@@ -260,6 +282,42 @@ export class CardDetailPanel {
 
     // Obter a API do VS Code para enviar mensagens
     var vscode = acquireVsCodeApi();
+    // DEFINIR cardId PRIMEIRO - necessário para os cliques nos botões
+    window.cardId = ${card.id};
+
+    // Handler do botão adicionar comentário
+    var commentBtn = document.getElementById('add-comment-btn');
+    if (commentBtn) {
+      commentBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var textarea = document.getElementById('new-comment');
+        var btn = document.getElementById('add-comment-btn');
+        if (!textarea || !btn) return;
+
+        var content = textarea.value.trim();
+        if (!content) return;
+
+        btn.disabled = true;
+        btn.textContent = 'A enviar...';
+
+        vscode.postMessage({ command: 'addComment', cardId: window.cardId, content: content });
+      });
+    }
+
+    // Receber resposta da extensão
+    window.addEventListener('message', function(event) {
+      var msg = event.data;
+      if (msg.command === 'commentAdded') {
+        location.reload();
+      } else if (msg.command === 'commentError') {
+        var btn = document.getElementById('add-comment-btn');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Adicionar Comentário';
+        }
+        alert('Erro ao adicionar comentário: ' + msg.error);
+      }
+    });
 
     // Edição inline do título
     window.startEditTitle = function() {
@@ -322,17 +380,7 @@ export class CardDetailPanel {
         titleEl.textContent = newTitle;
       }
     };
-    // Receber mensagens da extensão
-    window.addEventListener('message', function(event) {
-      var msg = event.data;
-      if (msg.command === 'updateCardTitleSuccess') {
-        window.updateCardTitleSuccess(msg.title);
-      }
-    });
-  </script>
-  <script>
-    window.cardId = ${card.id};
-  </script>
+    </script>
   <div id="image-modal" onclick="window.closeModal()">
     <span class="close" onclick="window.closeModal()">&times;</span>
     <img id="modal-img" src="" alt="Imagem ampliada">

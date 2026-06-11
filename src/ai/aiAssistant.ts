@@ -136,6 +136,9 @@ Responde APENAS com JSON válido:
     async () => {
       try {
         const card = await boardsClient.createCard(projectItem.project.id, payload);
+        // Adicionar comentário com a análise do código
+        const codeComment = `Análise AI:\n\n${selected.code.slice(0, 2000)}${selected.code.length > 2000 ? '\n...(código truncado)' : ''}`;
+        await boardsClient.addComment(card.id, codeComment);
         vscode.window.showInformationMessage(
           `AI criou o card "${card.title}" em ${card.status_label}`,
         );
