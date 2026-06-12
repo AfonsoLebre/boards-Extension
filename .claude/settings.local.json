@@ -9,7 +9,8 @@
       "Bash(gh auth login --hostname github.com --git-protocol https)",
       "Read(//c/Program Files/GitHub CLI/**)",
       "Read(//c/Users/Duarte Tavares/AppData/Local/Microsoft/WinGet/**)",
-      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --hostname github.com --git-protocol https)"
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --hostname github.com --git-protocol https)",
+      "Bash(npx tsc --noEmit)"
     ]
   }
 }

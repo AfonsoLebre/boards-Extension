@@ -136,15 +136,22 @@ export class CardDetailPanel {
       <section>
         <h3>Comentários (${comments.length})</h3>
         <div class="comments">
-          ${comments.length > 0 ? comments.map((c) => `
-            <div class="comment">
-              <div class="comment-header">
-                <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
-                <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
+          ${comments.length > 0 ? comments.map((c) => {
+            const avatarInitial = (c.user_name || c.user_email || "?").substring(0, 2).toUpperCase();
+            const avatarHtml = c.user_icon
+              ? `<img class="comment-avatar" src="${c.user_icon}" alt="" title="${this.escape(c.user_name || c.user_email)}">`
+              : `<span class="comment-avatar" title="${this.escape(c.user_name || c.user_email)}">${avatarInitial}</span>`;
+            return `
+              <div class="comment">
+                <div class="comment-header">
+                  ${avatarHtml}
+                  <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
+                  <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
+                </div>
+                <div class="comment-content">${this.renderHtml(c.content)}</div>
               </div>
-              <div class="comment-content">${this.renderHtml(c.content)}</div>
-            </div>
-          `).join('') : '<p class="meta">Sem comentários ainda.</p>'}
+            `;
+          }).join('') : '<p class="meta">Sem comentários ainda.</p>'}
         </div>
         <div class="add-comment">
           <textarea id="new-comment" placeholder="Escreve um comentário..." rows="3"></textarea>
@@ -157,14 +164,21 @@ export class CardDetailPanel {
       ? `<section>
           <h3>Histórico (${history.length})</h3>
           <div class="history">
-            ${history.map((h) => `
-              <div class="history-item">
-                <span class="history-icon">${this.getActivityIcon(h.type)}</span>
-                <span class="history-text">${this.escape(h.user_name || h.user_email)}</span>
-                <span class="history-date">${new Date(h.created_at).toLocaleString('pt-PT')}</span>
-                ${h.content ? `<div class="history-content">${this.renderHtml(h.content)}</div>` : ''}
-              </div>
-            `).join('')}
+            ${history.map((h) => {
+              const avatarInitial = (h.user_name || h.user_email || "?").substring(0, 2).toUpperCase();
+              const avatarHtml = h.user_icon
+                ? `<img class="history-avatar" src="${h.user_icon}" alt="" title="${this.escape(h.user_name || h.user_email)}">`
+                : `<span class="history-avatar" title="${this.escape(h.user_name || h.user_email)}">${avatarInitial}</span>`;
+              return `
+                <div class="history-item">
+                  ${avatarHtml}
+                  <span class="history-icon">${this.getActivityIcon(h.type)}</span>
+                  <span class="history-text">${this.escape(h.user_name || h.user_email)}</span>
+                  <span class="history-date">${new Date(h.created_at).toLocaleString('pt-PT')}</span>
+                  ${h.content ? `<div class="history-content">${this.renderHtml(h.content)}</div>` : ''}
+                </div>
+              `;
+            }).join('')}
           </div>
         </section>`
       : '';
@@ -196,7 +210,9 @@ export class CardDetailPanel {
     .description img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
     .comments { display: flex; flex-direction: column; gap: 12px; }
     .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; }
-    .comment-header { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em; }
+    .comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em; }
+    .comment-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.7em; font-weight: 600; flex-shrink: 0; }
+    .comment-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
     .comment-author { font-weight: 600; color: var(--vscode-foreground); }
     .comment-date { color: var(--vscode-descriptionForeground); }
     .comment-content { white-space: pre-wrap; word-break: break-word; }
@@ -208,6 +224,8 @@ export class CardDetailPanel {
     .add-comment button:disabled { opacity: 0.5; cursor: not-allowed; }
     .history { display: flex; flex-direction: column; gap: 8px; }
     .history-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+    .history-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.7em; font-weight: 600; flex-shrink: 0; margin-right: 4px; }
+    .history-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
     .history-icon { font-size: 0.9em; }
     .history-text { color: var(--vscode-foreground); }
     .history-date { color: var(--vscode-descriptionForeground); font-size: 0.9em; }

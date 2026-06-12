@@ -43,6 +43,7 @@ export interface Card {
   members: CardMember[];
   labels: CardLabel[];
   order?: number;
+  creator_email?: string;
 }
 
 export interface ProjectCardsResponse {
@@ -80,6 +81,7 @@ export interface Comment {
   task_id: string;
   user_email: string;
   user_name: string;
+  user_icon?: string;
   type: string;
   content: string;
   created_at: string;
