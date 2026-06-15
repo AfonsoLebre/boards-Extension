@@ -10,10 +10,16 @@ export interface Column {
     id: string;
     title: string;
 }
+export interface CardDescription {
+    id: number;
+    title: string;
+    content: string;
+}
 export interface Card {
     id: number;
     title: string;
     description?: string;
+    descriptions?: CardDescription[];
     status: string;
     status_label: string;
     priority: string;

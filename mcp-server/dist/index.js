@@ -158,8 +158,23 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
                             const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
                             const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
                             lines.push(`- ${priority} **${card.title}** (ID: ${card.id})${due}${members}`);
-                            if (card.description)
-                                lines.push(`  _${cleanHtmlDescription(card.description).slice(0, 2000)}${cleanHtmlDescription(card.description).length > 2000 ? '…' : ''}_`);
+                            // Mostrar todas as descrições (do array descriptions ou do campo description simples)
+                            const allDescriptions = [];
+                            if (card.descriptions && card.descriptions.length > 0) {
+                                card.descriptions.forEach((d) => {
+                                    if (d.content && d.content.trim()) {
+                                        allDescriptions.push(d.content);
+                                    }
+                                });
+                            }
+                            if (allDescriptions.length === 0 && card.description) {
+                                allDescriptions.push(card.description);
+                            }
+                            allDescriptions.forEach((desc, i) => {
+                                const title = card.descriptions?.[i]?.title || 'Descrição';
+                                const cleanDesc = cleanHtmlDescription(desc);
+                                lines.push(`  _${title}: ${cleanDesc.slice(0, 2000)}${cleanDesc.length > 2000 ? '…' : ''}_`);
+                            });
                         }
                     }
                 }
@@ -174,17 +189,47 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
                 await Promise.all(projects.map(async (p) => {
                     const { cards } = await getProjectCards(p.id);
                     const q = a.query.toLowerCase();
-                    const filtered = cards.filter((c) => (c.title.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)) &&
-                        (!a.priority || c.priority === a.priority));
+                    // Verificar se a query está no título, description simples, ou em qualquer description do array
+                    const filtered = cards.filter((c) => {
+                        if (c.title.toLowerCase().includes(q))
+                            return true;
+                        if ((c.description ?? '').toLowerCase().includes(q))
+                            return true;
+                        if (c.descriptions && c.descriptions.length > 0) {
+                            for (const d of c.descriptions) {
+                                if ((d.content ?? '').toLowerCase().includes(q))
+                                    return true;
+                            }
+                        }
+                        return false;
+                    });
                     const title = 'title' in p ? p.title : `Projeto ${p.id}`;
                     filtered.forEach((c) => results.push({ card: c, projectTitle: title }));
                 }));
                 if (results.length === 0) {
                     return { content: [{ type: 'text', text: `Nenhum card encontrado para "${a.query}".` }] };
                 }
-                const lines = results.map(({ card, projectTitle }) => {
+                const lines = [];
+                results.forEach(({ card, projectTitle }) => {
                     const priority = { low: '🟢', medium: '🟡', high: '🟠', urgent: '🔴' }[card.priority] ?? '⚪';
-                    return `- ${priority} **${card.title}** (${projectTitle} — ${card.status_label})`;
+                    lines.push(`- ${priority} **${card.title}** (${projectTitle} — ${card.status_label})`);
+                    // Mostrar todas as descrições nos resultados da pesquisa
+                    const allDescriptions = [];
+                    if (card.descriptions && card.descriptions.length > 0) {
+                        card.descriptions.forEach((d) => {
+                            if (d.content && d.content.trim()) {
+                                allDescriptions.push(d.content);
+                            }
+                        });
+                    }
+                    if (allDescriptions.length === 0 && card.description) {
+                        allDescriptions.push(card.description);
+                    }
+                    allDescriptions.forEach((desc, i) => {
+                        const title = card.descriptions?.[i]?.title || 'Descrição';
+                        const cleanDesc = cleanHtmlDescription(desc);
+                        lines.push(`  _${title}: ${cleanDesc.slice(0, 500)}${cleanDesc.length > 500 ? '…' : ''}_`);
+                    });
                 });
                 return { content: [{ type: 'text', text: `**${results.length} resultado(s):**\n\n${lines.join('\n')}` }] };
             }
