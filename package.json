@@ -2,7 +2,7 @@
   "name": "anturio-boards",
   "displayName": "Anturio Boards",
   "description": "Integração do Anturio Boards no VS Code — gere tarefas, sincroniza com git e usa AI diretamente no editor",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "publisher": "anturio",
   "repository": {
     "type": "git",
