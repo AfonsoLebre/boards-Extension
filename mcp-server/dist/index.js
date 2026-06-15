@@ -173,7 +173,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
                             allDescriptions.forEach((desc, i) => {
                                 const title = card.descriptions?.[i]?.title || 'Descrição';
                                 const cleanDesc = cleanHtmlDescription(desc);
-                                lines.push(`  _${title}: ${cleanDesc.slice(0, 2000)}${cleanDesc.length > 2000 ? '…' : ''}_`);
+                                lines.push(`  _${title}: ${cleanDesc.slice(0, 15000)}${cleanDesc.length > 15000 ? '…' : ''}_`);
                             });
                         }
                     }
@@ -228,7 +228,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
                     allDescriptions.forEach((desc, i) => {
                         const title = card.descriptions?.[i]?.title || 'Descrição';
                         const cleanDesc = cleanHtmlDescription(desc);
-                        lines.push(`  _${title}: ${cleanDesc.slice(0, 500)}${cleanDesc.length > 500 ? '…' : ''}_`);
+                        lines.push(`  _${title}: ${cleanDesc.slice(0, 15000)}${cleanDesc.length > 15000 ? '…' : ''}_`);
                     });
                 });
                 return { content: [{ type: 'text', text: `**${results.length} resultado(s):**\n\n${lines.join('\n')}` }] };
