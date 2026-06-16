@@ -37,7 +37,7 @@ export interface Card {
   descriptions?: CardDescription[];
   status: string;
   status_label: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  priority: 'low' | 'normal' | 'high' | 'critical';
   start_date?: string;
   due_date?: string;
   members: CardMember[];

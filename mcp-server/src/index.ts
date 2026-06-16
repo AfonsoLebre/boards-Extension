@@ -70,7 +70,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           query: { type: 'string', description: 'Texto a procurar' },
           project_id: { type: 'number', description: 'Limitar a um projeto específico (opcional)' },
-          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], description: 'Filtrar por prioridade (opcional)' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high', 'critical'], description: 'Filtrar por prioridade (opcional)' },
         },
         required: ['query'],
       },
@@ -85,7 +85,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           title: { type: 'string', description: 'Título do card' },
           description: { type: 'string', description: 'Descrição detalhada (opcional)' },
           column_id: { type: 'string', description: 'ID da coluna — se omitido usa a primeira coluna do projeto' },
-          priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'], description: 'Prioridade (default: medium)' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high', 'critical'], description: 'Prioridade (default: normal)' },
           due_date: { type: 'string', description: 'Data limite no formato YYYY-MM-DD (opcional)' },
         },
         required: ['project_id', 'title'],
@@ -174,7 +174,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             lines.push('_Sem cards_');
           } else {
             for (const card of colCards) {
-              const priority = { low: '🟢', medium: '🟡', high: '🟠', urgent: '🔴' }[card.priority] ?? '⚪';
+              const priority = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' }[card.priority] ?? '⚪';
               const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
               const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
               lines.push(`- ${priority} **${card.title}** (ID: ${card.id})${due}${members}`);
@@ -238,7 +238,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
         const lines: string[] = [];
         results.forEach(({ card, projectTitle }) => {
-          const priority = { low: '🟢', medium: '🟡', high: '🟠', urgent: '🔴' }[card.priority] ?? '⚪';
+          const priority = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' }[card.priority] ?? '⚪';
           lines.push(`- ${priority} **${card.title}** (${projectTitle} — ${card.status_label})`);
           // Mostrar todas as descrições nos resultados da pesquisa
           const allDescriptions: string[] = [];
@@ -275,7 +275,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           title: a.title,
           description: a.description,
           columnId: a.column_id,
-          priority: a.priority ?? 'medium',
+          priority: a.priority ?? 'normal',
           due_date: a.due_date,
         });
         return {

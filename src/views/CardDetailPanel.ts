@@ -2,10 +2,10 @@ import * as vscode from 'vscode';
 import { Card, Comment, boardsClient } from '../api/boardsClient';
 
 const PRIORITY_LABELS: Record<string, string> = {
-  urgent: '🔴 Urgente',
+  critical: '🔴 Crítica',
   high: '🟠 Alta',
-  medium: '🟡 Média',
-  low: '🟢 Baixa',
+  normal: '🟢 Normal',
+  low: '🔵 Baixa',
 };
 
 export class CardDetailPanel {

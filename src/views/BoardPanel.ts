@@ -92,10 +92,10 @@ export class BoardPanel {
     .card-title { font-size: 14px; margin-bottom: 6px; }
     .card-meta { font-size: 11px; color: #888; display: flex; gap: 10px; }
     .card-meta span { display: flex; align-items: center; gap: 3px; }
-    .priority-urgent { border-left: 3px solid #f14c4c; }
-    .priority-high { border-left: 3px solid #cca700; }
-    .priority-medium { border-left: 3px solid #007acc; }
-    .priority-low { border-left: 3px solid #4ec9b0; }
+    .priority-critical { border-left: 3px solid #e74c3c; }
+    .priority-high { border-left: 3px solid #f39c12; }
+    .priority-normal { border-left: 3px solid #2ecc71; }
+    .priority-low { border-left: 3px solid #3498db; }
     .loading { text-align: center; padding: 40px; color: #888; }
     .error { color: #f14c4c; text-align: center; padding: 20px; }
     .project-selector { margin-bottom: 16px; }
@@ -197,15 +197,14 @@ export class BoardPanel {
     function renderCard(card) {
       const priorityClass = 'priority-' + (card.priority || 'low');
       const dueDate = card.due_date ? new Date(card.due_date).toLocaleDateString('pt-PT') : '';
-      const priorityLabel = { urgent: '🔴', high: '🟡', medium: '🔵', low: '🟢' }[card.priority || 'low'];
+      const priorityColor = { critical: '#e74c3c', high: '#f39c12', normal: '#2ecc71', low: '#3498db' }[card.priority || 'low'];
 
       return \`
         <div class="card \${priorityClass}" draggable="true" data-card-id="\${card.id}"
              ondragstart="handleDragStart(event)"
              ondragend="handleDragEnd(event)">
-          <div class="card-title">\${card.title}</div>
+          <div class="card-title">\${priorityColor ? '<span style="color:' + priorityColor + '">●</span> ' : ''}\${card.title}</div>
           <div class="card-meta">
-            \${priorityLabel ? '<span>' + priorityLabel + '</span>' : ''}
             \${dueDate ? '<span>📅 ' + dueDate + '</span>' : ''}
           </div>
         </div>

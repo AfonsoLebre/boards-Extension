@@ -58,10 +58,10 @@ export async function editCardCommand(card: Card): Promise<void> {
 
     case 'priority': {
       const priorityOptions: { label: string; value: Card['priority'] }[] = [
-        { label: '🟢 Baixa', value: 'low' },
-        { label: '🟡 Média', value: 'medium' },
+        { label: '🔵 Baixa', value: 'low' },
+        { label: '🟢 Normal', value: 'normal' },
         { label: '🟠 Alta', value: 'high' },
-        { label: '🔴 Urgente', value: 'urgent' },
+        { label: '🔴 Crítica', value: 'critical' },
       ];
       const newPriority = await vscode.window.showQuickPick(priorityOptions, {
         placeHolder: 'Nova prioridade:',

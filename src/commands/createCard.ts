@@ -68,10 +68,10 @@ export async function createCardCommand(): Promise<void> {
 
   const priorityItem = await vscode.window.showQuickPick(
     [
-      { label: '🟢 Baixa', value: 'low' as const },
-      { label: '🟡 Média', value: 'medium' as const },
+      { label: '🔵 Baixa', value: 'low' as const },
+      { label: '🟢 Normal', value: 'normal' as const },
       { label: '🟠 Alta', value: 'high' as const },
-      { label: '🔴 Urgente', value: 'urgent' as const },
+      { label: '🔴 Crítica', value: 'critical' as const },
     ],
     { placeHolder: 'Prioridade' },
   );
@@ -127,10 +127,10 @@ export async function createCardInColumnCommand(projectId: number, columnId: str
 
   const priorityItem = await vscode.window.showQuickPick(
     [
-      { label: '🟢 Baixa', value: 'low' as const },
-      { label: '🟡 Média', value: 'medium' as const },
+      { label: '🔵 Baixa', value: 'low' as const },
+      { label: '🟢 Normal', value: 'normal' as const },
       { label: '🟠 Alta', value: 'high' as const },
-      { label: '🔴 Urgente', value: 'urgent' as const },
+      { label: '🔴 Crítica', value: 'critical' as const },
     ],
     { placeHolder: 'Prioridade' },
   );
@@ -201,7 +201,7 @@ export async function createCardFromSelectionCommand(): Promise<void> {
     title,
     descriptions: description ? [{ id: Date.now(), title: 'Descrição', content: description }] : undefined,
     columnId: picked.column?.id,
-    priority: 'medium',
+    priority: 'normal',
   };
 
   await vscode.window.withProgress(

@@ -51,7 +51,7 @@ export async function aiSuggestCardCommand(): Promise<void> {
           system: `És um assistente de gestão de projetos num editor de código.
 Analisa o código e sugere uma tarefa clara e acionável.
 Responde APENAS com JSON válido:
-{"title": "...", "description": "...", "priority": "low|medium|high|urgent"}
+{"title": "...", "description": "...", "priority": "low|normal|high|critical"}
 - title: máx 80 chars, imperativo (ex: "Corrigir", "Adicionar", "Refatorar")
 - description: 2-3 frases sobre o que fazer e porquê
 - priority: escolhe o nível de urgência adequado ao problema`,
@@ -119,10 +119,10 @@ Responde APENAS com JSON válido:
     columnId = colItem.column?.id;
   }
 
-  const validPriorities = ['low', 'medium', 'high', 'urgent'];
+  const validPriorities = ['low', 'normal', 'high', 'critical'];
   const priority = validPriorities.includes(suggestion.priority)
     ? (suggestion.priority as CreateCardPayload['priority'])
-    : 'medium';
+    : 'normal';
 
   const payload: CreateCardPayload = {
     title,

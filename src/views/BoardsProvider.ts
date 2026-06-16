@@ -27,8 +27,7 @@ export class AnturioTreeItem extends vscode.TreeItem {
         break;
       case 'card': {
         const card = this.data as Card;
-        this.iconPath = new vscode.ThemeIcon(this.priorityIcon(card.priority));
-        this.tooltip = card.description ?? card.title;
+        this.iconPath = undefined;
         this.description = card.due_date
           ? `até ${new Date(card.due_date).toLocaleDateString('pt-PT')}`
           : undefined;
@@ -45,9 +44,9 @@ export class AnturioTreeItem extends vscode.TreeItem {
 
   private priorityIcon(priority: string): string {
     switch (priority) {
-      case 'urgent': return 'error';
+      case 'critical': return 'error';
       case 'high': return 'warning';
-      case 'medium': return 'tasklist';
+      case 'normal': return 'tasklist';
       default: return 'circle-outline';
     }
   }
@@ -205,8 +204,9 @@ export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> 
     }
 
     return cards.map((card) => {
+      const priorityEmoji = { critical: '🔴', high: '🟠', normal: '🟢', low: '🔵' }[card.priority || 'low'];
       const item = new AnturioTreeItem(
-        card.title,
+        `${priorityEmoji} ${card.title}`,
         vscode.TreeItemCollapsibleState.None,
         'card',
         card,
