@@ -17,6 +17,10 @@ export interface Column {
 export interface CardMember {
   email: string;
   name: string;
+  avatar?: string;
+  icon?: string;
+  icon_url?: string;
+  user_icon?: string;
 }
 
 export interface CardLabel {
@@ -170,6 +174,10 @@ export class BoardsClient {
 
   async deleteCard(cardId: number): Promise<void> {
     await this.request<void>('DELETE', `/api/v1/cards/${cardId}`);
+  }
+
+  async getCardDetails(cardId: number): Promise<Card> {
+    return this.request<Card>('GET', `/server-api/api/tarefas/${cardId}`);
   }
 
   async getComments(cardId: number): Promise<Comment[]> {

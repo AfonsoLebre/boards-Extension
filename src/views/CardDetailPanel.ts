@@ -11,20 +11,40 @@ const PRIORITY_LABELS: Record<string, string> = {
 export class CardDetailPanel {
   private static panels = new Map<number, CardDetailPanel>();
   private readonly panel: vscode.WebviewPanel;
-  private card: Card;
+  private card!: Card;
 
   private constructor(card: Card) {
-    this.card = card;
+    this.card = card; // Inicializar logo para fallback
     this.panel = vscode.window.createWebviewPanel(
       'anturio.cardDetail',
       card.title,
       vscode.ViewColumn.One,
       { enableScripts: true, retainContextWhenHidden: true },
     );
-    this.loadComments(card.id);
-    this.panel.webview.html = this.buildHtml(card, []);
+    // Carregar detalhes completos do cartão para ter membros com fotos (com fallback)
+    this.loadCardDetails(card.id, card);
     this.panel.onDidDispose(() => CardDetailPanel.panels.delete(card.id));
     this.panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
+  }
+
+  private async loadCardDetails(cardId: number, fallbackCard?: Card): Promise<void> {
+    try {
+      // Buscar detalhes completos do cartão (inclui membros com fotos)
+      const fullCard = await boardsClient.getCardDetails(cardId);
+      this.card = fullCard;
+      this.panel.title = fullCard.title;
+      const activities = await boardsClient.getComments(cardId);
+      this.panel.webview.html = this.buildHtml(fullCard, activities);
+    } catch (err) {
+      console.error('[CardDetailPanel] Erro ao carregar detalhes, a usar fallback:', err);
+      // Fallback para o cartão original se falhar
+      if (fallbackCard) {
+        this.card = fallbackCard;
+        this.panel.title = fallbackCard.title;
+        const activities = await boardsClient.getComments(cardId);
+        this.panel.webview.html = this.buildHtml(fallbackCard, activities);
+      }
+    }
   }
 
   private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string }): Promise<void> {
@@ -44,7 +64,7 @@ export class CardDetailPanel {
         const comment = await boardsClient.addComment(msg.cardId, msg.content);
         console.log('[CardDetailPanel] Comment added:', comment);
         this.panel.webview.postMessage({ command: 'commentAdded', comment });
-        this.loadComments(this.card.id);
+        this.loadCardDetails(this.card.id);
       } catch (err) {
         console.error('[CardDetailPanel] Erro ao adicionar comentário:', err);
         this.panel.webview.postMessage({ command: 'commentError', error: err instanceof Error ? err.message : String(err) });
@@ -89,11 +109,26 @@ export class CardDetailPanel {
       .map((l) => `<span class="label" style="background:${this.escape(l.color)}">${this.escape(l.text)}</span>`)
       .join('');
 
-    const members = card.members.length > 0
-      ? `<section>
-          <h3>Membros</h3>
-          <ul>${card.members.map((m) => `<li>${this.escape(m.name)} <span class="meta">${this.escape(m.email)}</span></li>`).join('')}</ul>
-        </section>`
+    // Mostrar membros como mini-avatar ao lado do título
+    const membersAvatars = card.members.length > 0
+      ? card.members.map((m) => {
+          const initial = (m.name || m.email || "?").substring(0, 1).toUpperCase();
+          const anyM = m as any;
+          const memberIcon =
+            m.avatar ||
+            m.icon_url ||
+            m.user_icon ||
+            m.icon ||
+            anyM.photo ||
+            anyM.picture ||
+            anyM.user_avatar ||
+            anyM.avatar_url ||
+            anyM.img || '';
+          const avatarHtml = memberIcon
+            ? `<img class="member-avatar" src="${memberIcon}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
+            : `<span class="member-avatar" title="${this.escape(m.name)}">${initial}</span>`;
+          return avatarHtml;
+        }).join('')
       : '';
 
     const dates = (card.start_date || card.due_date)
@@ -199,7 +234,10 @@ export class CardDetailPanel {
     .label { border-radius: 4px; padding: 2px 8px; font-size: 0.8em; margin-right: 6px; color: #fff; }
     .labels { margin: 10px 0; }
     .meta { color: var(--vscode-descriptionForeground); font-size: 0.85em; }
-    .status { display: block; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 4px; padding: 2px 10px; font-size: 0.85em; margin: 4px 0 0 0; margin-left: 0; width: max-content; }
+    .status-line { display: flex; align-items: center; gap: 10px; margin: 4px 0 0 0; }
+    .status { display: inline-block; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); border-radius: 4px; padding: 2px 10px; font-size: 0.85em; }
+    .member-avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.75em; font-weight: 600; flex-shrink: 0; margin-left: -4px; border: 2px solid var(--vscode-editor-background); }
+    .member-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
     .priority { font-size: 0.85em; margin: 4px 0 0 0; margin-left: 0; }
     .dates { display: flex; gap: 20px; font-size: 0.85em; margin-top: 8px; }
     ul { padding-left: 20px; margin: 0; }
@@ -250,12 +288,14 @@ export class CardDetailPanel {
   <h1 class="card-title" id="card-title" ondblclick="window.startEditTitle()">${this.escape(card.title)}</h1>
   <input type="text" id="title-input" class="card-title-input" style="display:none;" value="${this.escape(card.title)}">
   <span class="save-hint">Enter para guardar | Esc para cancelar</span>
-  <div class="status">${this.escape(card.status_label)}</div>
+  <div class="status-line">
+    <span class="status">${this.escape(card.status_label)}</span>
+    ${membersAvatars}
+  </div>
   <div class="priority">${PRIORITY_LABELS[card.priority] ?? card.priority}</div>
   ${dates}
   <div class="labels">${labels}</div>
   ${descriptionHtml}
-  ${members}
   ${commentsHtml}
   ${historyHtml}
   <script>
