@@ -224,16 +224,20 @@ export class CardDetailPanel {
           <h3>Histórico (${history.length})</h3>
           <div class="history">
             ${history.map((h) => {
+              const isOwnHistory = currentUserEmail && h.user_email?.toLowerCase() === currentUserEmail;
+              const historyItemClass = isOwnHistory ? 'history-item is-own-history' : 'history-item';
               const avatarInitial = (h.user_name || h.user_email || "?").substring(0, 2).toUpperCase();
               const avatarHtml = h.user_icon
                 ? `<img class="history-avatar" src="${h.user_icon}" alt="" title="${this.escape(h.user_name || h.user_email)}">`
                 : `<span class="history-avatar" title="${this.escape(h.user_name || h.user_email)}">${avatarInitial}</span>`;
               return `
-                <div class="history-item">
-                  ${avatarHtml}
-                  <span class="history-icon">${this.getActivityIcon(h.type)}</span>
-                  <span class="history-text">${this.escape(h.user_name || h.user_email)}</span>
-                  <span class="history-date">${new Date(h.created_at).toLocaleString('pt-PT')}</span>
+                <div class="${historyItemClass}">
+                  <div class="history-header">
+                    ${avatarHtml}
+                    <span class="history-icon">${this.getActivityIcon(h.type)}</span>
+                    <span class="history-text">${this.escape(h.user_name || h.user_email)}</span>
+                    <span class="history-date">${new Date(h.created_at).toLocaleString('pt-PT')}</span>
+                  </div>
                   ${h.content ? `<div class="history-content">${this.renderHtml(h.content)}</div>` : ''}
                 </div>
               `;
@@ -271,7 +275,7 @@ export class CardDetailPanel {
     .description p { margin: 0 0 8px 0; }
     .description img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
     .comments { display: flex; flex-direction: column; gap: 12px; }
-    .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; }
+    .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; max-width: 50%; }
     .comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em; }
     .comment-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.7em; font-weight: 600; flex-shrink: 0; }
     .comment-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
@@ -288,13 +292,17 @@ export class CardDetailPanel {
     .add-comment button:hover { background: var(--vscode-button-hoverBackground); }
     .add-comment button:disabled { opacity: 0.5; cursor: not-allowed; }
     .history { display: flex; flex-direction: column; gap: 8px; }
-    .history-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+    .history-item { display: flex; flex-direction: column; gap: 4px; font-size: 0.85em; color: var(--vscode-descriptionForeground); max-width: 70%; }
+    .history-header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    /* Histórico do utilizador atual alinhado à direita */
+    .history-item.is-own-history { margin-left: auto; margin-right: 0; }
+    .history-item.is-own-history .history-header { flex-direction: row-reverse; }
     .history-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.7em; font-weight: 600; flex-shrink: 0; margin-right: 4px; }
     .history-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
     .history-icon { font-size: 0.9em; }
     .history-text { color: var(--vscode-foreground); }
     .history-date { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
-    .history-content { width: 100%; padding-left: 20px; margin-top: 2px; white-space: pre-wrap; }
+    .history-content { width: 100%; padding-left: 32px; margin-top: 2px; white-space: pre-wrap; }
     .image-gallery { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
     .image-gallery h4 { width: 100%; margin: 8px 0 4px; font-size: 0.85em; color: var(--vscode-descriptionForeground); }
     .image-preview img { opacity: 0.9; transition: opacity 0.2s; }
