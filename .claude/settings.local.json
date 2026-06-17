@@ -19,7 +19,14 @@
       "Bash(npx vsce package)",
       "Bash(echo \"Home: $HOME\")",
       "Bash(node -e \"console.log\\(require\\(''os''\\).homedir\\(\\)\\)\")",
-      "Bash(node -e \":*)"
+      "Bash(node -e \":*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Read(//c/Users/Duarte Tavares/AppData/Roaming/**)",
+      "Read(//c/Users/Duarte Tavares/.config/**)",
+      "Bash(gemini --help)",
+      "Bash(gemini skills --help)",
+      "Bash(ls -la *.md)",
+      "Bash(git add .claude/settings.local.json mcp-server/dist/ SKILL-INSTALL.md)"
     ]
   }
 }
