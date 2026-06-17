@@ -25,13 +25,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const provider = new BoardsProvider();
 
-  const authenticated = await updateAuthContext();
-  console.log('[Anturio] Authenticated:', authenticated);
-  if (authenticated) {
-    console.log('[Anturio] Starting MCP server...');
-    await setupMcpConfig(context);
-    startMcpServer(context);
-  }
+  const projectsView = vscode.window.createTreeView('anturio.projectsView', {
+    treeDataProvider: provider,
+    dragAndDropController: provider.dragAndDropController,
+  });
+  context.subscriptions.push(projectsView);
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('anturio.welcomeView', provider),
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async (e) => {
@@ -44,15 +45,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
       }
     }),
-  );
-
-  const projectsView = vscode.window.createTreeView('anturio.projectsView', {
-    treeDataProvider: provider,
-    dragAndDropController: provider.dragAndDropController,
-  });
-  context.subscriptions.push(projectsView);
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('anturio.welcomeView', provider),
   );
 
   context.subscriptions.push(
@@ -162,9 +154,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   setupGitPostCommitHook(context);
   setupAutoRefresh(context, provider);
 
-  if (boardsClient.isConfigured()) {
-    provider.refresh();
-  }
+  // Auth check runs async so it never blocks command registration
+  updateAuthContext().then(async (authenticated) => {
+    console.log('[Anturio] Authenticated:', authenticated);
+    if (authenticated) {
+      console.log('[Anturio] Starting MCP server...');
+      await setupMcpConfig(context);
+      startMcpServer(context);
+      provider.refresh();
+    }
+  });
 }
 
 async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpServerPath: string; mcpEntry: object } | null> {
