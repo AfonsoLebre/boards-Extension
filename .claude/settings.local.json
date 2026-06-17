@@ -10,7 +10,16 @@
       "Read(//c/Program Files/GitHub CLI/**)",
       "Read(//c/Users/Duarte Tavares/AppData/Local/Microsoft/WinGet/**)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --hostname github.com --git-protocol https)",
-      "Bash(npx tsc --noEmit)"
+      "Bash(npx tsc --noEmit)",
+      "Bash(node -e \"const path = require\\(''path''\\); const fs = require\\(''fs''\\); const context = {extensionPath: ''c:/Users/Duarte Tavares/Documents/Anturio/boards-Extension/out''}; const parentMcpPath = path.join\\(context.extensionPath, ''..'', ''mcp-server'', ''dist'', ''index.js''\\); const siblingMcpPath = path.join\\(context.extensionPath, ''mcp-server'', ''dist'', ''index.js''\\); console.log\\(''Parent:'', parentMcpPath, ''Exists:'', fs.existsSync\\(parentMcpPath\\)\\); console.log\\(''Sibling:'', siblingMcpPath, ''Exists:'', fs.existsSync\\(siblingMcpPath\\)\\);\")",
+      "Read(//c/Users/Duarte Tavares/Documents/Anturio/boards-Extension/$HOME/**)",
+      "Read(//c/Users/Duarte Tavares/.claude/**)",
+      "WebSearch",
+      "Bash(npx tsc)",
+      "Bash(npx vsce package)",
+      "Bash(echo \"Home: $HOME\")",
+      "Bash(node -e \"console.log\\(require\\(''os''\\).homedir\\(\\)\\)\")",
+      "Bash(node -e \":*)"
     ]
   }
 }

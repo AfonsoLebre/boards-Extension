@@ -185,16 +185,37 @@ async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpSe
   };
 
   // Escreve na config global do Claude Code
-  writeMcpToFile(path.join(os.homedir(), '.claude', 'settings.json'), mcpEntry);
+  const claudeGlobalPath = path.join(os.homedir(), '.claude', 'settings.json');
+  writeMcpToFile(claudeGlobalPath, mcpEntry);
 
   // Escreve também na config do Cursor
-  writeMcpToFile(path.join(os.homedir(), '.cursor', 'mcp.json'), mcpEntry, 'cursor');
+  const cursorPath = path.join(os.homedir(), '.cursor', 'mcp.json');
+  writeMcpToFile(cursorPath, mcpEntry, 'cursor');
 
   // Escreve na config do projeto VS Code (se houver workspace aberto)
   const workspaceFolders = vscode.workspace.workspaceFolders;
+  let projectClaudeDir = '';
+
   if (workspaceFolders && workspaceFolders.length > 0) {
-    const projectClaude = path.join(workspaceFolders[0].uri.fsPath, '.claude', 'settings.json');
+    projectClaudeDir = path.join(workspaceFolders[0].uri.fsPath, '.claude');
+  } else {
+    // Se não há workspace, tenta usar a pasta padrão do Anturio-Trello
+    const defaultPath = path.join(os.homedir(), 'Documents', 'Anturio', 'Anturio-Trello', '.claude');
+    if (fs.existsSync(path.join(os.homedir(), 'Documents', 'Anturio', 'Anturio-Trello'))) {
+      projectClaudeDir = defaultPath;
+    }
+  }
+
+  if (projectClaudeDir) {
+    // Cria directório .claude se não existir
+    if (!fs.existsSync(projectClaudeDir)) {
+      fs.mkdirSync(projectClaudeDir, { recursive: true });
+    }
+
+    const projectClaude = path.join(projectClaudeDir, 'settings.json');
     writeMcpToFile(projectClaude, mcpEntry);
+
+    console.log('[Anturio] MCP config written to:', projectClaude);
   }
 
   return { mcpServerPath, mcpEntry: { command: 'node', args: [mcpServerPath], env: { ANTURIO_API_KEY: apiKey, ANTURIO_SERVER_URL: serverUrl } } };
@@ -279,17 +300,15 @@ function writeMcpToFile(
       settings = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     } catch {}
 
-    if (format === 'cursor') {
-      if (!settings.mcpServers) settings.mcpServers = {};
-      (settings.mcpServers as Record<string, unknown>)['anturio-boards'] = mcpEntry;
-    } else {
-      if (!settings.mcpServers) settings.mcpServers = {};
-      (settings.mcpServers as Record<string, unknown>)['anturio-boards'] = mcpEntry;
-    }
+    // Para Claude Code: usa a chave "mcpServers" directamente
+    // Para Cursor: usa a chave "mcpServers" mas com estrutura diferente
+    if (!settings.mcpServers) settings.mcpServers = {};
+    (settings.mcpServers as Record<string, unknown>)['anturio-boards'] = mcpEntry;
 
     fs.writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
-  } catch {
-    // Silencioso — se não tiver permissão para escrever, não quebra a extensão
+    console.log('[Anturio] MCP config written to:', filePath);
+  } catch (err) {
+    console.error('[Anturio] Error writing MCP config:', err);
   }
 }
 
