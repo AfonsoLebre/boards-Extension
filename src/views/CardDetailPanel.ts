@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Card, Comment, boardsClient } from '../api/boardsClient';
+import { Card, Comment, CurrentUser, boardsClient } from '../api/boardsClient';
 
 const PRIORITY_LABELS: Record<string, string> = {
   critical: '🔴 Crítica',
@@ -12,6 +12,7 @@ export class CardDetailPanel {
   private static panels = new Map<number, CardDetailPanel>();
   private readonly panel: vscode.WebviewPanel;
   private card!: Card;
+  private currentUser: CurrentUser | null = null;
 
   private constructor(card: Card) {
     this.card = card; // Inicializar logo para fallback
@@ -29,6 +30,13 @@ export class CardDetailPanel {
 
   private async loadCardDetails(cardId: number, fallbackCard?: Card): Promise<void> {
     try {
+      // Buscar utilizador atual
+      try {
+        this.currentUser = await boardsClient.getCurrentUser();
+      } catch (e) {
+        console.log('[CardDetailPanel] Não foi possível obter utilizador atual:', e);
+        this.currentUser = null;
+      }
       // Buscar detalhes completos do cartão (inclui membros com fotos)
       const fullCard = await boardsClient.getCardDetails(cardId);
       this.card = fullCard;
@@ -41,8 +49,21 @@ export class CardDetailPanel {
       if (fallbackCard) {
         this.card = fallbackCard;
         this.panel.title = fallbackCard.title;
-        const activities = await boardsClient.getComments(cardId);
-        this.panel.webview.html = this.buildHtml(fallbackCard, activities);
+        // Buscar utilizador atual mesmo no fallback
+        try {
+          this.currentUser = await boardsClient.getCurrentUser();
+        } catch (e) {
+          console.log('[CardDetailPanel] Não foi possível obter utilizador atual no fallback:', e);
+          this.currentUser = null;
+        }
+        try {
+          const activities = await boardsClient.getComments(cardId);
+          this.panel.webview.html = this.buildHtml(fallbackCard, activities);
+        } catch (e2) {
+          console.error('[CardDetailPanel] Erro ao carregar comentários no fallback:', e2);
+          // Mostrar mesmo sem comentários se falhar
+          this.panel.webview.html = this.buildHtml(fallbackCard, []);
+        }
       }
     }
   }
@@ -166,18 +187,21 @@ export class CardDetailPanel {
 
     const comments = activities.filter((a) => a.type === 'comment').reverse();
     const history = activities.filter((a) => a.type !== 'comment').reverse();
+    const currentUserEmail = this.currentUser?.email?.toLowerCase();
 
     const commentsHtml = `
       <section>
         <h3>Comentários (${comments.length})</h3>
         <div class="comments">
           ${comments.length > 0 ? comments.map((c) => {
+            const isOwnComment = currentUserEmail && c.user_email?.toLowerCase() === currentUserEmail;
+            const commentClass = isOwnComment ? 'comment is-own-comment' : 'comment';
             const avatarInitial = (c.user_name || c.user_email || "?").substring(0, 2).toUpperCase();
             const avatarHtml = c.user_icon
               ? `<img class="comment-avatar" src="${c.user_icon}" alt="" title="${this.escape(c.user_name || c.user_email)}">`
               : `<span class="comment-avatar" title="${this.escape(c.user_name || c.user_email)}">${avatarInitial}</span>`;
             return `
-              <div class="comment">
+              <div class="${commentClass}">
                 <div class="comment-header">
                   ${avatarHtml}
                   <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
@@ -254,6 +278,9 @@ export class CardDetailPanel {
     .comment-author { font-weight: 600; color: var(--vscode-foreground); }
     .comment-date { color: var(--vscode-descriptionForeground); }
     .comment-content { white-space: pre-wrap; word-break: break-word; }
+    /* Comentários do utilizador atual alinhados à direita */
+    .comment.is-own-comment { margin-left: auto; margin-right: 0; }
+    .comment.is-own-comment .comment-header { flex-direction: row-reverse; }
     .add-comment { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--vscode-panel-border); }
     .add-comment textarea { width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 60px; }
     .add-comment textarea:focus { outline: none; border-color: var(--vscode-focusBorder); }

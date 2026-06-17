@@ -91,6 +91,13 @@ export interface Comment {
   created_at: string;
 }
 
+export interface CurrentUser {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+}
+
 export class BoardsApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -190,6 +197,10 @@ export class BoardsClient {
       type: 'comment',
       content,
     });
+  }
+
+  async getCurrentUser(): Promise<CurrentUser> {
+    return this.request<CurrentUser>('GET', '/api/v1/me');
   }
 
   async validateApiKey(): Promise<boolean> {
