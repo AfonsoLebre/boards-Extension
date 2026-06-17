@@ -100,7 +100,7 @@ export class BoardsClient {
   }
 
   private get serverUrl(): string {
-    return this.config.get<string>('serverUrl', 'http://localhost:3000').replace(/\/$/, '');
+    return this.config.get<string>('serverUrl', 'https://boards.anturio.app').replace(/\/$/, '');
   }
 
   private get apiKey(): string {
@@ -150,6 +150,10 @@ export class BoardsClient {
 
   async getProjectCards(projectId: number): Promise<ProjectCardsResponse> {
     return this.request<ProjectCardsResponse>('GET', `/api/v1/projects/${projectId}/cards`);
+  }
+
+  async getCard(cardId: number): Promise<Card> {
+    return this.request<Card>('GET', `/api/v1/cards/${cardId}`);
   }
 
   async createCard(projectId: number, payload: CreateCardPayload): Promise<Card> {
