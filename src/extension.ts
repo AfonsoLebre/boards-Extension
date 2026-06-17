@@ -170,7 +170,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpServerPath: string; mcpEntry: object } | null> {
   const config = vscode.workspace.getConfiguration('anturio');
   const apiKey = config.get<string>('apiKey', '');
-  const serverUrl = config.get<string>('serverUrl', 'http://localhost:3000');
+  const serverUrl = config.get<string>('serverUrl', 'https://boards.anturio.app/api');
 
   const mcpServerPath = path.join(context.extensionPath, '..', 'mcp-server', 'dist', 'index.js');
 
@@ -227,7 +227,7 @@ function startMcpServer(context: vscode.ExtensionContext): void {
 
   const config = vscode.workspace.getConfiguration('anturio');
   const apiKey = config.get<string>('apiKey', '');
-  const serverUrl = config.get<string>('serverUrl', 'http://localhost:3000');
+  const serverUrl = config.get<string>('serverUrl', 'https://boards.anturio.app/api');
 
   // Se já houver um processo, mata
   if (mcpProcess) {

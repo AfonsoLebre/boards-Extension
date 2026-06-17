@@ -111,7 +111,7 @@ export class BoardsClient {
   }
 
   private get serverUrl(): string {
-    return this.config.get<string>('serverUrl', 'http://localhost:3000').replace(/\/$/, '');
+    return this.config.get<string>('serverUrl', 'https://boards.anturio.app/api').replace(/\/$/, '');
   }
 
   private get apiKey(): string {

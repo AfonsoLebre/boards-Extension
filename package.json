@@ -25,8 +25,8 @@
       "properties": {
         "anturio.serverUrl": {
           "type": "string",
-          "default": "http://localhost:3001",
-          "description": "URL do servidor Anturio (ex: http://localhost:3001 ou o endereço de produção)"
+          "default": "https://boards.anturio.app/api",
+          "description": "URL do servidor Anturio (ex: https://boards.anturio.app/api)"
         },
         "anturio.apiKey": {
           "type": "string",

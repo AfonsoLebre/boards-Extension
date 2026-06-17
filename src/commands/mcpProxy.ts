@@ -23,7 +23,7 @@ interface TunnelConnection {
 async function startMcpServerHttp(): Promise<TunnelConnection> {
   const config = vscode.workspace.getConfiguration('anturio');
   const apiKey = config.get<string>('apiKey', '');
-  const serverUrl = config.get<string>('serverUrl', 'http://localhost:3001');
+  const serverUrl = config.get<string>('serverUrl', 'https://boards.anturio.app/api');
 
   // Find the mcp-server dist/index.js
   const ext = vscode.extensions.getExtension('anturio.boards');
