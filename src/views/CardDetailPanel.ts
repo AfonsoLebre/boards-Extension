@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
-import { Card, Comment, CurrentUser, boardsClient } from '../api/boardsClient';
+import { Card, Comment, CurrentUser, boardsClient, CardAttachment } from '../api/boardsClient';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import * as cp from 'child_process';
+
 
 const PRIORITY_LABELS: Record<string, string> = {
   critical: '🔴 Crítica',
@@ -68,7 +73,7 @@ export class CardDetailPanel {
     }
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string }): Promise<void> {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[] }): Promise<void> {
     if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
       try {
         console.log('[CardDetailPanel] Updating title for card:', msg.cardId);
@@ -89,6 +94,74 @@ export class CardDetailPanel {
       } catch (err) {
         console.error('[CardDetailPanel] Erro ao adicionar comentário:', err);
         this.panel.webview.postMessage({ command: 'commentError', error: err instanceof Error ? err.message : String(err) });
+      }
+    } else if (msg.command === 'addAttachments' && msg.cardId && msg.files) {
+      try {
+        const files: CardAttachment[] = msg.files;
+        console.log('[CardDetailPanel] Adding attachments to card:', msg.cardId, 'files count:', files.length);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const currentAttachments = fullCard.attachments || [];
+        const newAttachments = [...currentAttachments, ...files];
+        await boardsClient.updateCardRaw(msg.cardId, {
+          attachments: newAttachments,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao adicionar anexos:', err);
+        vscode.window.showErrorMessage('Erro ao adicionar anexos: ' + (err instanceof Error ? err.message : String(err)));
+        this.panel.webview.postMessage({ command: 'attachmentError' });
+      }
+    } else if (msg.command === 'deleteAttachment' && msg.cardId && msg.index !== undefined) {
+      try {
+        const index = msg.index;
+        console.log('[CardDetailPanel] Deleting attachment from card:', msg.cardId, 'index:', index);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const currentAttachments = fullCard.attachments || [];
+        const newAttachments = currentAttachments.filter((_, i) => i !== index);
+        await boardsClient.updateCardRaw(msg.cardId, {
+          attachments: newAttachments,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao eliminar anexo:', err);
+        vscode.window.showErrorMessage('Erro ao eliminar anexo: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'openAttachment' && msg.cardId && msg.index !== undefined) {
+      try {
+        const index = msg.index;
+        console.log('[CardDetailPanel] Opening attachment index:', index);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const att = (fullCard.attachments || [])[index];
+        if (!att) throw new Error('Anexo não encontrado');
+
+        if (att.url.startsWith('data:')) {
+          const parts = att.url.split(',');
+          const base64Data = parts[1];
+          const buffer = Buffer.from(base64Data, 'base64');
+          // Sanitizar o nome do ficheiro para evitar problemas no path
+          const safeName = att.name.replace(/[<>:"/\\|?*]/g, '_');
+          const tempFilePath = path.join(os.tmpdir(), safeName);
+          fs.writeFileSync(tempFilePath, buffer);
+          console.log('[CardDetailPanel] Temp file written:', tempFilePath);
+          // Abrir com a aplicação padrão do SO (mais fiável que vscode.env.openExternal para ficheiros locais)
+          if (process.platform === 'win32') {
+            cp.exec(`start "" "${tempFilePath}"`);
+          } else if (process.platform === 'darwin') {
+            cp.exec(`open "${tempFilePath}"`);
+          } else {
+            cp.exec(`xdg-open "${tempFilePath}"`);
+          }
+        } else {
+          // URL externo — abrir no browser
+          vscode.env.openExternal(vscode.Uri.parse(att.url));
+        }
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao abrir anexo:', err);
+        vscode.window.showErrorMessage('Erro ao abrir anexo: ' + (err instanceof Error ? err.message : String(err)));
       }
     }
   }
@@ -183,6 +256,46 @@ export class CardDetailPanel {
       return descriptions.map((d) => {
         return `<section><h3>${this.escape(d.title)}</h3><div class="description" id="desc">${this.renderDescriptionWithImages(d.content)}</div></section>`;
       }).join('');
+    })();
+
+    const attachmentsHtml = (() => {
+      const attachments = card.attachments || [];
+      const listHtml = attachments.length > 0
+        ? attachments.map((att, idx) => {
+            const isImage = att.type?.startsWith('image/');
+            let thumbContent = '';
+            if (isImage) {
+              thumbContent = `<img src="${att.url}" alt="" />`;
+            } else {
+              thumbContent = att.type?.includes('pdf') ? '📕' : '📄';
+            }
+            return `
+              <div class="attachment-item">
+                <div class="attachment-left" onclick="window.openAttachment(${idx})">
+                  <div class="attachment-thumb">${thumbContent}</div>
+                  <div class="attachment-info">
+                    <span class="attachment-name">${this.escape(att.name)}</span>
+                    <span class="attachment-type">${this.escape(att.type?.split('/')[1] || 'ficheiro')}</span>
+                  </div>
+                </div>
+                <button class="attachment-delete-btn" title="Eliminar anexo" onclick="window.deleteAttachment(event, ${idx})">✕</button>
+              </div>
+            `;
+          }).join('')
+        : '<p class="meta" id="no-attachments-meta">Sem anexos ainda.</p>';
+
+      return `
+        <section>
+          <h3>Anexos (<span id="attachments-count">${attachments.length}</span>)</h3>
+          <div class="attachments-list" id="attachments-list">
+            ${listHtml}
+          </div>
+          <div style="margin-top: 12px;">
+            <input type="file" id="attachment-input" style="display:none;" multiple>
+            <button id="add-attachment-btn" class="attachment-button">📎 Adicionar Anexo</button>
+          </div>
+        </section>
+      `;
     })();
 
     const comments = activities.filter((a) => a.type === 'comment').reverse();
@@ -317,6 +430,19 @@ export class CardDetailPanel {
     .card-title-input:focus { outline: none; }
     .save-hint { color: var(--vscode-descriptionForeground); font-size: 0.7em; margin-left: 8px; opacity: 0; transition: opacity 0.2s; }
     .card-title-input:focus + .save-hint { opacity: 1; }
+    /* Attachments Section Styles */
+    .attachments-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .attachment-item { display: flex; align-items: center; justify-content: space-between; background: var(--vscode-textBlockQuote-background); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--vscode-panel-border); }
+    .attachment-left { display: flex; align-items: center; gap: 12px; cursor: pointer; flex: 1; }
+    .attachment-thumb { font-size: 1.5rem; display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; background: var(--vscode-editor-background); overflow: hidden; }
+    .attachment-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .attachment-info { display: flex; flex-direction: column; }
+    .attachment-name { font-weight: 600; font-size: 0.9em; color: var(--vscode-foreground); word-break: break-all; }
+    .attachment-type { font-size: 0.75em; color: var(--vscode-descriptionForeground); text-transform: uppercase; }
+    .attachment-delete-btn { background: transparent; border: none; color: var(--vscode-errorForeground, #f85149); cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1em; opacity: 0.7; transition: opacity 0.2s; border-radius: 4px; }
+    .attachment-delete-btn:hover { opacity: 1; background: rgba(248, 81, 73, 0.1); }
+    .attachment-button { display: inline-flex; align-items: center; gap: 6px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 12px; font-size: 0.85em; cursor: pointer; margin-top: 8px; }
+    .attachment-button:hover { background: var(--vscode-button-hoverBackground); }
   </style>
 </head>
 <body>
@@ -331,6 +457,7 @@ export class CardDetailPanel {
   ${dates}
   <div class="labels">${labels}</div>
   ${descriptionHtml}
+  ${attachmentsHtml}
   ${commentsHtml}
   ${historyHtml}
   <script>
@@ -409,8 +536,84 @@ export class CardDetailPanel {
           btn.textContent = 'Adicionar Comentário';
         }
         alert('Erro ao adicionar comentário: ' + msg.error);
+      } else if (msg.command === 'attachmentError') {
+        var attBtn = document.getElementById('add-attachment-btn');
+        if (attBtn) {
+          attBtn.disabled = false;
+          attBtn.textContent = '📎 Adicionar Anexo';
+        }
       }
     });
+
+    // Funções de Anexos
+    window.openAttachment = function(idx) {
+      // Para imagens: abrir no modal diretamente (sem ir ao host)
+      var items = document.querySelectorAll('.attachment-item');
+      var item = items[idx];
+      if (item) {
+        var img = item.querySelector('.attachment-thumb img');
+        if (img) {
+          var modal = document.getElementById('image-modal');
+          var modalImg = document.getElementById('modal-img');
+          if (modal && modalImg) {
+            modalImg.src = img.src;
+            modal.classList.add('active');
+          }
+          return;
+        }
+      }
+      // Para outros tipos: enviar ao host para abrir externamente
+      vscode.postMessage({ command: 'openAttachment', cardId: window.cardId, index: idx });
+    };
+
+    window.deleteAttachment = function(event, idx) {
+      event.stopPropagation();
+      // confirm() não está disponível em webviews do VS Code — apagar diretamente
+      vscode.postMessage({ command: 'deleteAttachment', cardId: window.cardId, index: idx });
+    };
+
+    // Configurar o input de ficheiros e botão
+    var attBtn = document.getElementById('add-attachment-btn');
+    var attInput = document.getElementById('attachment-input');
+    if (attBtn && attInput) {
+      attBtn.addEventListener('click', function() {
+        attInput.click();
+      });
+      attInput.addEventListener('change', function(e) {
+        var files = Array.from(e.target.files);
+        if (!files.length) return;
+
+        attBtn.disabled = true;
+        attBtn.textContent = 'A processar...';
+
+        var promises = files.map(function(file) {
+          return new Promise(function(resolve) {
+            var reader = new FileReader();
+            reader.onloadend = function() {
+              resolve({
+                name: file.name,
+                url: reader.result,
+                type: file.type
+              });
+            };
+            reader.readAsDataURL(file);
+          });
+        });
+
+        Promise.all(promises).then(function(loadedFiles) {
+          vscode.postMessage({
+            command: 'addAttachments',
+            cardId: window.cardId,
+            files: loadedFiles
+          });
+          attInput.value = '';
+        }).catch(function(err) {
+          attBtn.disabled = false;
+          attBtn.textContent = '📎 Adicionar Anexo';
+          alert('Erro ao ler ficheiros: ' + err);
+        });
+      });
+    }
 
     // Edição inline do título
     window.startEditTitle = function() {

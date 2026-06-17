@@ -34,6 +34,12 @@ export interface CardDescription {
   content: string;
 }
 
+export interface CardAttachment {
+  name: string;
+  url: string;
+  type: string;
+}
+
 export interface Card {
   id: number;
   title: string;
@@ -48,6 +54,7 @@ export interface Card {
   labels: CardLabel[];
   order?: number;
   creator_email?: string;
+  attachments?: CardAttachment[];
 }
 
 export interface ProjectCardsResponse {
@@ -169,6 +176,10 @@ export class BoardsClient {
 
   async updateCard(cardId: number, payload: UpdateCardPayload): Promise<Card> {
     return this.request<Card>('PATCH', `/api/v1/cards/${cardId}`, payload);
+  }
+
+  async updateCardRaw(cardId: number, payload: Partial<Card> & Record<string, any>): Promise<Card> {
+    return this.request<Card>('PUT', `/server-api/api/tarefas/${cardId}`, payload);
   }
 
   async batchUpdateCards(updates: { id: number; status?: string; order?: number }[]): Promise<void> {
