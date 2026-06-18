@@ -32,7 +32,10 @@
       "Bash(git add package.json anturio-boards-0.1.5.vsix)",
       "Bash(git status --short -uall)",
       "Bash(ls -la *.vsix)",
-      "Bash(git add .claude/settings.local.json mcp-server/dist/index.js)"
+      "Bash(git add .claude/settings.local.json mcp-server/dist/index.js)",
+      "Bash(git add package.json anturio-boards-0.1.6.vsix)",
+      "Bash(git tag -a v0.1.6 -m \"Release v0.1.6 - Com tutorial de instalação SKILL para Claude Code e Gemini CLI\")",
+      "Bash(git push origin v0.1.6)"
     ]
   }
 }

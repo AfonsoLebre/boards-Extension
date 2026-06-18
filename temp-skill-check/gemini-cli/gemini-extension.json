@@ -1,0 +1,7 @@
+{
+  "name": "anturio-boards",
+  "version": "1.0.0",
+  "skills": {
+    "anturioboards": "./skills/anturioboards"
+  }
+}
