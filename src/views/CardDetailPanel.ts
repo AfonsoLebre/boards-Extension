@@ -73,7 +73,7 @@ export class CardDetailPanel {
     }
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[] }): Promise<void> {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number }): Promise<void> {
     if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
       try {
         console.log('[CardDetailPanel] Updating title for card:', msg.cardId);
@@ -94,6 +94,16 @@ export class CardDetailPanel {
       } catch (err) {
         console.error('[CardDetailPanel] Erro ao adicionar comentário:', err);
         this.panel.webview.postMessage({ command: 'commentError', error: err instanceof Error ? err.message : String(err) });
+      }
+    } else if (msg.command === 'deleteComment' && msg.commentId) {
+      try {
+        console.log('[CardDetailPanel] Deleting comment:', msg.commentId);
+        await boardsClient.deleteComment(msg.commentId);
+        this.panel.webview.postMessage({ command: 'commentDeleted' });
+        this.loadCardDetails(this.card.id);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao eliminar comentário:', err);
+        this.panel.webview.postMessage({ command: 'commentDeleteError', error: err instanceof Error ? err.message : String(err) });
       }
     } else if (msg.command === 'addAttachments' && msg.cardId && msg.files) {
       try {
@@ -309,16 +319,18 @@ export class CardDetailPanel {
           ${comments.length > 0 ? comments.map((c) => {
             const isOwnComment = currentUserEmail && c.user_email?.toLowerCase() === currentUserEmail;
             const commentClass = isOwnComment ? 'comment is-own-comment' : 'comment';
+            const deleteBtn = isOwnComment ? `<button class="comment-delete-btn" onclick="window.deleteComment(event, ${c.id})" title="Eliminar comentário">✕</button>` : '';
             const avatarInitial = (c.user_name || c.user_email || "?").substring(0, 2).toUpperCase();
             const avatarHtml = c.user_icon
               ? `<img class="comment-avatar" src="${c.user_icon}" alt="" title="${this.escape(c.user_name || c.user_email)}">`
               : `<span class="comment-avatar" title="${this.escape(c.user_name || c.user_email)}">${avatarInitial}</span>`;
             return `
-              <div class="${commentClass}">
+              <div class="${commentClass}" data-comment-id="${c.id}">
                 <div class="comment-header">
                   ${avatarHtml}
                   <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
                   <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
+                  ${deleteBtn}
                 </div>
                 <div class="comment-content">${this.renderHtml(c.content)}</div>
               </div>
@@ -389,7 +401,10 @@ export class CardDetailPanel {
     .description img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
     .comments { display: flex; flex-direction: column; gap: 12px; }
     .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; max-width: 50%; }
-    .comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em; }
+    .comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em; flex: 1; }
+    .comment-delete-btn { background: transparent; border: none; color: var(--vscode-errorForeground, #f85149); cursor: pointer; padding: 2px 6px; font-size: 0.9em; opacity: 0; transition: opacity 0.2s; border-radius: 4px; margin-left: auto; }
+    .comment:hover .comment-delete-btn { opacity: 0.7; }
+    .comment-delete-btn:hover { opacity: 1; background: rgba(248, 81, 73, 0.15); }
     .comment-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.7em; font-weight: 600; flex-shrink: 0; }
     .comment-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
     .comment-author { font-weight: 600; color: var(--vscode-foreground); }
@@ -510,17 +525,33 @@ export class CardDetailPanel {
     if (commentBtn) {
       commentBtn.addEventListener('click', function(e) {
         e.preventDefault();
-        var textarea = document.getElementById('new-comment');
-        var btn = document.getElementById('add-comment-btn');
-        if (!textarea || !btn) return;
+        addComment();
+      });
+    }
 
-        var content = textarea.value.trim();
-        if (!content) return;
+    // Handler para adicionar comentário (reutilizável)
+    function addComment() {
+      var textarea = document.getElementById('new-comment');
+      var btn = document.getElementById('add-comment-btn');
+      if (!textarea || !btn) return;
 
-        btn.disabled = true;
-        btn.textContent = 'A enviar...';
+      var content = textarea.value.trim();
+      if (!content) return;
 
-        vscode.postMessage({ command: 'addComment', cardId: window.cardId, content: content });
+      btn.disabled = true;
+      btn.textContent = 'A enviar...';
+
+      vscode.postMessage({ command: 'addComment', cardId: window.cardId, content: content });
+    }
+
+    // Enter para adicionar comentário, Shift+Enter para nova linha
+    var commentTextarea = document.getElementById('new-comment');
+    if (commentTextarea) {
+      commentTextarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          addComment();
+        }
       });
     }
 
@@ -528,6 +559,10 @@ export class CardDetailPanel {
     window.addEventListener('message', function(event) {
       var msg = event.data;
       if (msg.command === 'commentAdded') {
+        var ta = document.getElementById('new-comment');
+        if (ta) ta.value = '';
+        location.reload();
+      } else if (msg.command === 'commentDeleted') {
         location.reload();
       } else if (msg.command === 'commentError') {
         var btn = document.getElementById('add-comment-btn');
@@ -536,6 +571,8 @@ export class CardDetailPanel {
           btn.textContent = 'Adicionar Comentário';
         }
         alert('Erro ao adicionar comentário: ' + msg.error);
+      } else if (msg.command === 'commentDeleteError') {
+        alert('Erro ao eliminar comentário: ' + msg.error);
       } else if (msg.command === 'attachmentError') {
         var attBtn = document.getElementById('add-attachment-btn');
         if (attBtn) {
@@ -544,6 +581,13 @@ export class CardDetailPanel {
         }
       }
     });
+
+    // Handler para eliminar comentário
+    window.deleteComment = function(event, commentId) {
+      event.stopPropagation();
+      // confirm() não está disponível em webviews do VS Code — eliminar diretamente
+      vscode.postMessage({ command: 'deleteComment', commentId: commentId });
+    };
 
     // Funções de Anexos
     window.openAttachment = function(idx) {

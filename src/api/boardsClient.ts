@@ -214,6 +214,10 @@ export class BoardsClient {
     });
   }
 
+  async deleteComment(commentId: number): Promise<void> {
+    await this.request<void>('DELETE', `/server-api/api/activities/${commentId}`);
+  }
+
   async getCurrentUser(): Promise<CurrentUser> {
     return this.request<CurrentUser>('GET', '/api/v1/me');
   }
