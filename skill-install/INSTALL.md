@@ -5,11 +5,50 @@ Este tutorial mostra como instalar a skill do Anturio Boards no Claude Code e Ge
 ## Pré-requisitos
 
 - Claude Code ou Gemini CLI instalado
-- MCP server (opcional, necessário para as ferramentas funcionarem)
+- Node.js instalado (para executar o MCP server)
+- API Key do Anturio Boards (obtida nas definições da extensão VSCode ou no portal)
 
 ---
 
-## Parte 1: Claude Code
+## Parte 0: Compilar o MCP Server (necessário para as ferramentas funcionarem)
+
+O MCP server é necessário para as ferramentas funcionarem. Se ainda não tens o MCP server compilado:
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+O ficheiro compilado estará em `mcp-server/dist/index.js`.
+
+---
+
+## Parte 1: Configurar o MCP Server no Claude Code
+
+Para configurar o MCP server no Claude Code, edita o ficheiro `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "anturio-boards": {
+      "command": "node",
+      "args": ["PATH/Para/mcp-server/dist/index.js"],
+      "env": {
+        "ANTURIO_API_KEY": "a-teu-api-key-aqui"
+      }
+    }
+  }
+}
+```
+
+Substitui `PATH/Para/` pelo caminho absoluto para a pasta do projeto.
+
+Para obter a API Key, vai às definições da extensão VSCode do Anturio Boards ou ao portal.
+
+---
+
+## Parte 2: Claude Code
 
 ### Instalação
 
@@ -28,7 +67,31 @@ Escreve `/anturioboards` no chat para invocar a skill.
 
 ---
 
-## Parte 2: Gemini CLI
+## Parte 3: Configurar o MCP Server no Gemini CLI
+
+Para configurar o MCP server no Gemini CLI, cria ou edita o ficheiro `~/.gemini/mcp_config.json`:
+
+```json
+{
+  "servers": {
+    "anturio-boards": {
+      "command": "node",
+      "args": ["PATH/Para/mcp-server/dist/index.js"],
+      "env": {
+        "ANTURIO_API_KEY": "a-teu-api-key-aqui"
+      }
+    }
+  }
+}
+```
+
+Substitui `PATH/Para/` pelo caminho absoluto para a pasta do projeto.
+
+Para obter a API Key, vai às definições da extensão VSCode do Anturio Boards ou ao portal.
+
+---
+
+## Parte 4: Gemini CLI
 
 ### Instalação
 
