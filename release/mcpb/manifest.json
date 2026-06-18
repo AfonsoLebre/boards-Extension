@@ -1,0 +1,55 @@
+{
+  "manifest_version": "0.3",
+  "name": "anturio-boards",
+  "display_name": "Anturio Boards",
+  "version": "0.1.0",
+  "description": "Ver e gerir os teus cards e projetos do Anturio Boards diretamente no Claude.",
+  "author": {
+    "name": "Anturio",
+    "url": "https://boards.anturio.app"
+  },
+  "homepage": "https://boards.anturio.app",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "ANTURIO_API_KEY": "${user_config.api_key}",
+        "ANTURIO_SERVER_URL": "${user_config.server_url}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "A tua API Key do Anturio Boards. Gera em boards.anturio.app -> Perfil -> API Key. Comeca por ant_",
+      "sensitive": true,
+      "required": true
+    },
+    "server_url": {
+      "type": "string",
+      "title": "URL do servidor",
+      "description": "Base URL da API. Mantem o valor por defeito salvo indicacao contraria.",
+      "default": "https://boards.anturio.app",
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "list_projects", "description": "Lista os projetos a que tens acesso" },
+    { "name": "get_project_cards", "description": "Mostra colunas e cards de um projeto" },
+    { "name": "search_cards", "description": "Procura cards por titulo ou descricao" },
+    { "name": "create_card", "description": "Cria um novo card" },
+    { "name": "move_card", "description": "Move um card para outra coluna" },
+    { "name": "delete_card", "description": "Apaga um card (requer confirmacao)" },
+    { "name": "get_card_comments", "description": "Le os comentarios de um card" }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

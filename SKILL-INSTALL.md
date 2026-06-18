@@ -2,6 +2,23 @@
 
 Este tutorial mostra como configurar a extensão Anturio Boards como uma skill, para que possas usar `/anturioboards` no chat e interagir com os teus quadros Kanban.
 
+---
+
+## ⭐ Instalação rápida (recomendado)
+
+Não precisas do tutorial manual abaixo. Descarrega os instaladores prontos em **[Releases](https://github.com/AfonsoLebre/boards-Extension/releases)**:
+
+- **Claude Desktop** → descarrega `anturio-boards.mcpb`, faz duplo clique, cola a API Key.
+- **Claude Code (CLI/VSCode)** → descarrega `anturio-boards-claude-code.zip`, extrai e corre `install.ps1` (Windows) ou `install.sh` (mac/Linux).
+
+A API Key gera-se em https://boards.anturio.app → Perfil → "API Key".
+
+> Os instaladores são gerados pelo workflow `.github/workflows/release.yml` quando publicas uma tag `vX.Y.Z`. Para gerar localmente: `npm ci && node build-release.js` (saída em `release-build/`).
+
+O resto do documento é a **configuração manual**, caso prefiras.
+
+---
+
 ## Pré-requisitos
 
 1. Ter uma CLI de IA configurada (Claude Code ou Gemini CLI)
@@ -38,7 +55,7 @@ Edita o ficheiro `C:\Users\Duarte Tavares\.claude\settings.json`:
       "args": ["C:/Users/Duarte Tavares/Documents/Anturio/boards-Extension/mcp-server/dist/index.js"],
       "env": {
         "ANTURIO_API_KEY": "ant_a_sua_api_key_aqui",
-        "ANTURIO_SERVER_URL": "https://boards.anturio.app/api"
+        "ANTURIO_SERVER_URL": "https://boards.anturio.app"
       }
     }
   }
@@ -108,7 +125,7 @@ Edita o ficheiro `C:\Users\Duarte Tavares\AppData\Roaming\gemini\config\mcp_conf
       "args": ["C:/Users/Duarte Tavares/Documents/Anturio/boards-Extension/mcp-server/dist/index.js"],
       "env": {
         "ANTURIO_API_KEY": "ant_a_sua_api_key_aqui",
-        "ANTURIO_SERVER_URL": "https://boards.anturio.app/api"
+        "ANTURIO_SERVER_URL": "https://boards.anturio.app"
       }
     }
   }
