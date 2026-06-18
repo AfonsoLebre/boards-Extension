@@ -20,8 +20,12 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install deps
+      - name: Install deps (root)
         run: npm ci
+
+      - name: Install deps (mcp-server)
+        run: npm ci
+        working-directory: mcp-server
 
       - name: Build release artifacts
         run: node build-release.js
