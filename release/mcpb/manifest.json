@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "anturio-boards",
   "display_name": "Anturio Boards",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Ver e gerir os teus cards e projetos do Anturio Boards diretamente no Claude.",
   "author": {
     "name": "Anturio",

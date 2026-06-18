@@ -169,7 +169,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
         for (const col of columns) {
           const colCards = cards.filter((c) => c.status === col.id);
-          lines.push(`\n### ${col.title} (${colCards.length})`);
+          lines.push(`\n### ${col.title} (Coluna ID: ${col.id}) — ${colCards.length} card(s)`);
           if (colCards.length === 0) {
             lines.push('_Sem cards_');
           } else {
@@ -271,10 +271,19 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           priority?: string;
           due_date?: string;
         };
+        // Se column_id omitido, usa a primeira coluna do projeto (a API não tem default).
+        let columnId = a.column_id;
+        if (!columnId) {
+          const { columns } = await getProjectCards(a.project_id);
+          if (columns.length === 0) {
+            return { content: [{ type: 'text', text: `O projeto ${a.project_id} não tem colunas. Indica um column_id.` }], isError: true };
+          }
+          columnId = columns[0].id;
+        }
         const card = await createCard(a.project_id, {
           title: a.title,
           description: a.description,
-          columnId: a.column_id,
+          columnId,
           priority: a.priority ?? 'normal',
           due_date: a.due_date,
         });
