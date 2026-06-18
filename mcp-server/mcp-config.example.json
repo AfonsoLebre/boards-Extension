@@ -9,7 +9,7 @@
         "args": ["CAMINHO_ABSOLUTO/mcp-server/dist/index.js"],
         "env": {
           "ANTURIO_API_KEY": "ant_A_TUA_CHAVE_AQUI",
-          "ANTURIO_SERVER_URL": "https://boards.anturio.app/api"
+          "ANTURIO_SERVER_URL": "https://boards.anturio.app"
         }
       }
     }
@@ -23,7 +23,7 @@
         "args": ["CAMINHO_ABSOLUTO/mcp-server/dist/index.js"],
         "env": {
           "ANTURIO_API_KEY": "ant_A_TUA_CHAVE_AQUI",
-          "ANTURIO_SERVER_URL": "https://boards.anturio.app/api"
+          "ANTURIO_SERVER_URL": "https://boards.anturio.app"
         }
       }
     }
@@ -38,7 +38,7 @@
         "args": ["CAMINHO_ABSOLUTO/mcp-server/dist/index.js"],
         "env": {
           "ANTURIO_API_KEY": "ant_A_TUA_CHAVE_AQUI",
-          "ANTURIO_SERVER_URL": "https://boards.anturio.app/api"
+          "ANTURIO_SERVER_URL": "https://boards.anturio.app"
         }
       }
     }

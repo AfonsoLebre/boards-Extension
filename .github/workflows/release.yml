@@ -1,0 +1,52 @@
+name: Release
+
+# Cria os artefactos de instalação e anexa-os à Release quando publicas uma tag vX.Y.Z
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps (root)
+        run: npm ci
+
+      - name: Install deps (mcp-server)
+        run: npm ci
+        working-directory: mcp-server
+
+      - name: Build release artifacts
+        run: node build-release.js
+
+      - name: Zip Claude Code installer
+        run: |
+          cd release-build
+          zip -r anturio-boards-claude-code.zip anturio-boards-claude-code
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-build/anturio-boards.mcpb
+            release-build/anturio-boards-claude-code.zip
+          fail_on_unmatched_files: true
+          body: |
+            ## Instalar o Anturio Boards no Claude
+
+            **Claude Desktop:** descarrega `anturio-boards.mcpb` e faz duplo clique.
+
+            **Claude Code:** descarrega `anturio-boards-claude-code.zip`, extrai e corre `install.ps1` (Windows) ou `install.sh` (mac/Linux).
+
+            Precisas da tua API Key em https://boards.anturio.app → Perfil → API Key.

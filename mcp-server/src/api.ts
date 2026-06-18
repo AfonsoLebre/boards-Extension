@@ -79,7 +79,17 @@ export async function createCard(
     due_date?: string;
   },
 ): Promise<Card> {
-  return request<Card>('POST', `/api/v1/projects/${projectId}/cards`, payload);
+  // O endpoint de criação usa `status` para a coluna (no modelo, card.status === column.id).
+  // Enviamos também `columnId` por compatibilidade.
+  const body = {
+    title: payload.title,
+    description: payload.description,
+    status: payload.columnId,
+    columnId: payload.columnId,
+    priority: payload.priority,
+    due_date: payload.due_date,
+  };
+  return request<Card>('POST', `/api/v1/projects/${projectId}/cards`, body);
 }
 
 export async function moveCard(cardId: number, columnId: string): Promise<Card> {

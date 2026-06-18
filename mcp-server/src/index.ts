@@ -169,7 +169,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 
         for (const col of columns) {
           const colCards = cards.filter((c) => c.status === col.id);
-          lines.push(`\n### ${col.title} (${colCards.length})`);
+          lines.push(`\n### ${col.title} (Coluna ID: ${col.id}) — ${colCards.length} card(s)`);
           if (colCards.length === 0) {
             lines.push('_Sem cards_');
           } else {
@@ -271,17 +271,26 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           priority?: string;
           due_date?: string;
         };
+        // Precisamos das colunas para o default e para resolver o nome (o POST de
+        // criação não devolve status_label, por isso confiar nele dá "undefined").
+        const { columns } = await getProjectCards(a.project_id);
+        if (columns.length === 0) {
+          return { content: [{ type: 'text', text: `O projeto ${a.project_id} não tem colunas. Não é possível criar o card.` }], isError: true };
+        }
+        // Se column_id omitido, usa a primeira coluna do projeto (a API não tem default).
+        const columnId = a.column_id ?? columns[0].id;
         const card = await createCard(a.project_id, {
           title: a.title,
           description: a.description,
-          columnId: a.column_id,
+          columnId,
           priority: a.priority ?? 'normal',
           due_date: a.due_date,
         });
+        const colLabel = columns.find((c) => c.id === columnId)?.title ?? card.status_label ?? columnId;
         return {
           content: [{
             type: 'text',
-            text: `✅ Card criado: **${card.title}** (ID: ${card.id}) em *${card.status_label}*`,
+            text: `✅ Card criado: **${card.title}** (ID: ${card.id}) em *${colLabel}* (Coluna ID: ${columnId})`,
           }],
         };
       }
