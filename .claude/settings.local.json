@@ -36,7 +36,11 @@
       "Bash(git add package.json anturio-boards-0.1.6.vsix)",
       "Bash(git tag -a v0.1.6 -m \"Release v0.1.6 - Com tutorial de instalação SKILL para Claude Code e Gemini CLI\")",
       "Bash(git push origin v0.1.6)",
-      "Bash(git add skill-install/INSTALL.md)"
+      "Bash(git add skill-install/INSTALL.md)",
+      "WebFetch(domain:boards.anturio.pt)",
+      "Bash(gh release view v0.2.0 --repo AfonsoLebre/boards-Extension)",
+      "Bash(gh release view v0.2.0 --repo AfonsoLebre/boards-Extension --json assets)",
+      "Bash(gh release list --repo AfonsoLebre/boards-Extension)"
     ]
   }
 }

@@ -96,6 +96,7 @@ export interface Comment {
   type: string;
   content: string;
   created_at: string;
+  parent_id?: number | null;
 }
 
 export interface CurrentUser {
@@ -203,14 +204,17 @@ export class BoardsClient {
   }
 
   async getComments(cardId: number): Promise<Comment[]> {
+    console.log('[BoardsClient] getComments for card:', cardId);
     return this.request<Comment[]>('GET', `/server-api/api/tarefas/${cardId}/activities`);
   }
 
-  async addComment(cardId: number, content: string): Promise<Comment> {
+  async addComment(cardId: number, content: string, parentId?: number): Promise<Comment> {
+    console.log('[BoardsClient] addComment parentId:', parentId, 'type:', typeof parentId);
     return this.request<Comment>('POST', '/server-api/api/activities', {
       task_id: cardId.toString(),
       type: 'comment',
       content,
+      parent_id: parentId || null,
     });
   }
 

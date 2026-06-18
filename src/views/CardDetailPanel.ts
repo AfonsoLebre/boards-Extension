@@ -73,8 +73,12 @@ export class CardDetailPanel {
     }
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number }): Promise<void> {
-    if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number }): Promise<void> {
+    console.log('[handleMessage] command:', msg.command);
+    if (msg.command === 'refreshComments' && this.card?.id) {
+      console.log('[handleMessage] refreshing comments for card:', this.card.id);
+      await this.loadComments(this.card.id);
+    } else if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
       try {
         console.log('[CardDetailPanel] Updating title for card:', msg.cardId);
         const updated = await boardsClient.updateCard(msg.cardId, { title: msg.title });
@@ -86,8 +90,8 @@ export class CardDetailPanel {
       }
     } else if (msg.command === 'addComment' && msg.cardId && msg.content) {
       try {
-        console.log('[CardDetailPanel] Adding comment to card:', msg.cardId, 'content:', msg.content);
-        const comment = await boardsClient.addComment(msg.cardId, msg.content);
+        console.log('[CardDetailPanel] Adding comment to card:', msg.cardId, 'content:', msg.content, 'parentId:', msg.parentId);
+        const comment = await boardsClient.addComment(msg.cardId, msg.content, msg.parentId);
         console.log('[CardDetailPanel] Comment added:', comment);
         this.panel.webview.postMessage({ command: 'commentAdded', comment });
         this.loadCardDetails(this.card.id);
@@ -216,23 +220,23 @@ export class CardDetailPanel {
     // Mostrar membros como mini-avatar ao lado do título
     const membersAvatars = card.members.length > 0
       ? card.members.map((m) => {
-          const initial = (m.name || m.email || "?").substring(0, 1).toUpperCase();
-          const anyM = m as any;
-          const memberIcon =
-            m.avatar ||
-            m.icon_url ||
-            m.user_icon ||
-            m.icon ||
-            anyM.photo ||
-            anyM.picture ||
-            anyM.user_avatar ||
-            anyM.avatar_url ||
-            anyM.img || '';
-          const avatarHtml = memberIcon
-            ? `<img class="member-avatar" src="${memberIcon}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
-            : `<span class="member-avatar" title="${this.escape(m.name)}">${initial}</span>`;
-          return avatarHtml;
-        }).join('')
+        const initial = (m.name || m.email || "?").substring(0, 1).toUpperCase();
+        const anyM = m as any;
+        const memberIcon =
+          m.avatar ||
+          m.icon_url ||
+          m.user_icon ||
+          m.icon ||
+          anyM.photo ||
+          anyM.picture ||
+          anyM.user_avatar ||
+          anyM.avatar_url ||
+          anyM.img || '';
+        const avatarHtml = memberIcon
+          ? `<img class="member-avatar" src="${memberIcon}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
+          : `<span class="member-avatar" title="${this.escape(m.name)}">${initial}</span>`;
+        return avatarHtml;
+      }).join('')
       : '';
 
     const dates = (card.start_date || card.due_date)
@@ -272,14 +276,14 @@ export class CardDetailPanel {
       const attachments = card.attachments || [];
       const listHtml = attachments.length > 0
         ? attachments.map((att, idx) => {
-            const isImage = att.type?.startsWith('image/');
-            let thumbContent = '';
-            if (isImage) {
-              thumbContent = `<img src="${att.url}" alt="" />`;
-            } else {
-              thumbContent = att.type?.includes('pdf') ? '📕' : '📄';
-            }
-            return `
+          const isImage = att.type?.startsWith('image/');
+          let thumbContent = '';
+          if (isImage) {
+            thumbContent = `<img src="${att.url}" alt="" />`;
+          } else {
+            thumbContent = att.type?.includes('pdf') ? '📕' : '📄';
+          }
+          return `
               <div class="attachment-item">
                 <div class="attachment-left" onclick="window.openAttachment(${idx})">
                   <div class="attachment-thumb">${thumbContent}</div>
@@ -291,7 +295,7 @@ export class CardDetailPanel {
                 <button class="attachment-delete-btn" title="Eliminar anexo" onclick="window.deleteAttachment(event, ${idx})">✕</button>
               </div>
             `;
-          }).join('')
+        }).join('')
         : '<p class="meta" id="no-attachments-meta">Sem anexos ainda.</p>';
 
       return `
@@ -308,37 +312,87 @@ export class CardDetailPanel {
       `;
     })();
 
-    const comments = activities.filter((a) => a.type === 'comment').reverse();
-    const history = activities.filter((a) => a.type !== 'comment').reverse();
+    const comments = activities
+      .filter((a) => a.type === 'comment')
+      .sort((a, b) => {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        if (isNaN(timeA) || isNaN(timeB)) return a.id - b.id;
+        return timeA !== timeB ? timeA - timeB : a.id - b.id;
+      });
+
+    const history = activities
+      .filter((a) => a.type !== 'comment')
+      .sort((a, b) => {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        if (isNaN(timeA) || isNaN(timeB)) return a.id - b.id;
+        return timeA !== timeB ? timeA - timeB : a.id - b.id;
+      });
+
     const currentUserEmail = this.currentUser?.email?.toLowerCase();
+
+    // Função para renderizar um comentário
+    const renderComment = (c: Comment) => {
+      const isReply = !!c.parent_id;
+      const isOwnComment = currentUserEmail && c.user_email?.toLowerCase() === currentUserEmail;
+      const commentClass = isOwnComment ? 'comment is-own-comment' : (isReply ? 'comment is-reply' : 'comment');
+      
+      // Para respostas, encontrar o comentário pai para mostrar a quem responde
+      let replyToIndicator = '';
+      let replyPreview = '';
+      if (isReply && c.parent_id) {
+        const parentComment = comments.find(p => p.id === c.parent_id);
+        if (parentComment) {
+          const parentName = parentComment.user_name || parentComment.user_email;
+          const parentAvatarInitial = (parentComment.user_name || parentComment.user_email || "?").substring(0, 2).toUpperCase();
+          const parentAvatarHtml = parentComment.user_icon
+            ? `<img class="reply-to-avatar" src="${parentComment.user_icon}" alt="">`
+            : `<span class="reply-to-avatar">${parentAvatarInitial}</span>`;
+          const preview = parentComment.content.length > 60 ? parentComment.content.substring(0, 60) + '...' : parentComment.content;
+          replyToIndicator = `<span class="reply-to-indicator">${parentAvatarHtml}<span>↩️ ${this.escape(parentName)}</span></span>`;
+          replyPreview = `<div class="reply-preview">"${this.escape(preview)}"</div>`;
+        }
+      }
+
+      const deleteBtn = isOwnComment ? `<button class="comment-delete-btn" onclick="window.deleteComment(event, ${c.id})" title="Eliminar comentário">✕</button>` : '';
+      const replyBtn = `<button class="comment-reply-btn" data-comment-id="${c.id}" data-parent-id="${c.id}" title="Responder">↩️</button>`;
+      const avatarInitial = (c.user_name || c.user_email || "?").substring(0, 2).toUpperCase();
+      const avatarHtml = c.user_icon
+        ? `<img class="comment-avatar" src="${c.user_icon}" alt="" title="${this.escape(c.user_name || c.user_email)}">`
+        : `<span class="comment-avatar" title="${this.escape(c.user_name || c.user_email)}">${avatarInitial}</span>`;
+
+      return `
+        <div class="${commentClass}" data-comment-id="${c.id}">
+          <div class="comment-header">
+            ${avatarHtml}
+            <div class="comment-header-info">
+              <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
+              <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
+            </div>
+            <div class="comment-header-actions">
+              ${replyBtn}
+              ${deleteBtn}
+            </div>
+          </div>
+          ${replyToIndicator ? `<div class="reply-to-line">${replyToIndicator}</div>` : ''}
+          <div class="comment-content">${this.renderHtml(c.content)}</div>
+          ${replyPreview}
+        </div>
+      `;
+    };
 
     const commentsHtml = `
       <section>
         <h3>Comentários (${comments.length})</h3>
         <div class="comments">
-          ${comments.length > 0 ? comments.map((c) => {
-            const isOwnComment = currentUserEmail && c.user_email?.toLowerCase() === currentUserEmail;
-            const commentClass = isOwnComment ? 'comment is-own-comment' : 'comment';
-            const deleteBtn = isOwnComment ? `<button class="comment-delete-btn" onclick="window.deleteComment(event, ${c.id})" title="Eliminar comentário">✕</button>` : '';
-            const avatarInitial = (c.user_name || c.user_email || "?").substring(0, 2).toUpperCase();
-            const avatarHtml = c.user_icon
-              ? `<img class="comment-avatar" src="${c.user_icon}" alt="" title="${this.escape(c.user_name || c.user_email)}">`
-              : `<span class="comment-avatar" title="${this.escape(c.user_name || c.user_email)}">${avatarInitial}</span>`;
-            return `
-              <div class="${commentClass}" data-comment-id="${c.id}">
-                <div class="comment-header">
-                  ${avatarHtml}
-                  <span class="comment-author">${this.escape(c.user_name || c.user_email)}</span>
-                  <span class="comment-date">${new Date(c.created_at).toLocaleString('pt-PT')}</span>
-                  ${deleteBtn}
-                </div>
-                <div class="comment-content">${this.renderHtml(c.content)}</div>
-              </div>
-            `;
-          }).join('') : '<p class="meta">Sem comentários ainda.</p>'}
+          ${comments.length > 0 
+            ? comments.map((c) => renderComment(c)).join('') 
+            : '<p class="meta">Sem comentários ainda.</p>'}
         </div>
         <div class="add-comment">
           <textarea id="new-comment" placeholder="Escreve um comentário..." rows="3"></textarea>
+          <input type="hidden" id="reply-to-comment" value="">
           <button id="add-comment-btn" class="comment-button">Adicionar Comentário</button>
         </div>
       </section>
@@ -349,13 +403,13 @@ export class CardDetailPanel {
           <h3>Histórico (${history.length})</h3>
           <div class="history">
             ${history.map((h) => {
-              const isOwnHistory = currentUserEmail && h.user_email?.toLowerCase() === currentUserEmail;
-              const historyItemClass = isOwnHistory ? 'history-item is-own-history' : 'history-item';
-              const avatarInitial = (h.user_name || h.user_email || "?").substring(0, 2).toUpperCase();
-              const avatarHtml = h.user_icon
-                ? `<img class="history-avatar" src="${h.user_icon}" alt="" title="${this.escape(h.user_name || h.user_email)}">`
-                : `<span class="history-avatar" title="${this.escape(h.user_name || h.user_email)}">${avatarInitial}</span>`;
-              return `
+        const isOwnHistory = currentUserEmail && h.user_email?.toLowerCase() === currentUserEmail;
+        const historyItemClass = isOwnHistory ? 'history-item is-own-history' : 'history-item';
+        const avatarInitial = (h.user_name || h.user_email || "?").substring(0, 2).toUpperCase();
+        const avatarHtml = h.user_icon
+          ? `<img class="history-avatar" src="${h.user_icon}" alt="" title="${this.escape(h.user_name || h.user_email)}">`
+          : `<span class="history-avatar" title="${this.escape(h.user_name || h.user_email)}">${avatarInitial}</span>`;
+        return `
                 <div class="${historyItemClass}">
                   <div class="history-header">
                     ${avatarHtml}
@@ -366,7 +420,7 @@ export class CardDetailPanel {
                   ${h.content ? `<div class="history-content">${this.renderHtml(h.content)}</div>` : ''}
                 </div>
               `;
-            }).join('')}
+      }).join('')}
           </div>
         </section>`
       : '';
@@ -400,10 +454,33 @@ export class CardDetailPanel {
     .description p { margin: 0 0 8px 0; }
     .description img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
     .comments { display: flex; flex-direction: column; gap: 12px; }
-    .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; max-width: 50%; }
-    .comment-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85em; flex: 1; }
-    .comment-delete-btn { background: transparent; border: none; color: var(--vscode-errorForeground, #f85149); cursor: pointer; padding: 2px 6px; font-size: 0.9em; opacity: 0; transition: opacity 0.2s; border-radius: 4px; margin-left: auto; }
+    .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; max-width: 80%; }
+    .comment.is-reply { margin-left: 24px; max-width: calc(80% - 24px); background: var(--vscode-editorWidget-background); border-left: 3px solid var(--vscode-focusBorder); }
+    .comment.is-reply .comment-delete-btn,
+    .comment.is-reply .comment-reply-btn { opacity: 0.7; }
+    .comment.is-reply:hover .comment-delete-btn,
+    .comment.is-reply:hover .comment-reply-btn { opacity: 1; }
+    .reply-to-indicator { display: inline-flex; align-items: center; gap: 2px; color: var(--vscode-descriptionForeground); font-size: 0.8em; }
+    .reply-to-avatar { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.6em; font-weight: 600; flex-shrink: 0; }
+    .reply-to-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .reply-to-indicator span { display: inline-flex; align-items: center; gap: 2px; }
+    .reply-to-line { padding-left: 32px; margin-bottom: 2px; }
+    .reply-preview { font-size: 0.8em; color: var(--vscode-descriptionForeground); border-left: 2px solid var(--vscode-focusBorder); padding-left: 8px; margin-top: 4px; font-style: italic; }
+    .comment-header { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 6px; font-size: 0.85em; }
+    .comment-header-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; flex: 1; }
+    .comment-header-actions { display: flex; gap: 4px; }
+    .comment-delete-btn { background: transparent; border: none; color: var(--vscode-errorForeground, #f85149); cursor: pointer; padding: 2px 6px; font-size: 0.85em; opacity: 0.6; transition: opacity 0.2s; border-radius: 4px; }
+    .comment:hover .comment-delete-btn { opacity: 1; background: rgba(248, 81, 73, 0.1); }
     .comment:hover .comment-delete-btn { opacity: 0.7; }
+    .comment-reply-btn { background: transparent; border: none; color: var(--vscode-focusBorder); cursor: pointer; padding: 2px 6px; font-size: 0.85em; opacity: 0.6; transition: opacity 0.2s; border-radius: 4px; }
+    .comment:hover .comment-reply-btn { opacity: 1; }
+    .comment-reply-btn:hover { text-decoration: underline; }
+    .reply-box { display: none; margin-top: 8px; margin-left: 32px; }
+    .reply-box.active { display: block; }
+    .reply-box textarea { width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 50px; }
+    .reply-box-actions { display: flex; gap: 8px; margin-top: 6px; }
+    .reply-box-actions button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 4px 10px; font-size: 0.8em; cursor: pointer; }
+    .reply-box-actions .reply-cancel { background: transparent; border: 1px solid var(--vscode-panel-border); color: var(--vscode-foreground); }
     .comment-delete-btn:hover { opacity: 1; background: rgba(248, 81, 73, 0.15); }
     .comment-avatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.7em; font-weight: 600; flex-shrink: 0; }
     .comment-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
@@ -420,7 +497,7 @@ export class CardDetailPanel {
     .add-comment button:hover { background: var(--vscode-button-hoverBackground); }
     .add-comment button:disabled { opacity: 0.5; cursor: not-allowed; }
     .history { display: flex; flex-direction: column; gap: 8px; }
-    .history-item { display: flex; flex-direction: column; gap: 4px; font-size: 0.85em; color: var(--vscode-descriptionForeground); max-width: 70%; }
+    .history-item { display: flex; flex-direction: column; gap: 4px; font-size: 0.85em; color: var(--vscode-descriptionForeground); max-width: 80%; }
     .history-header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     /* Histórico do utilizador atual alinhado à direita */
     .history-item.is-own-history { margin-left: auto; margin-right: 0; }
@@ -561,9 +638,10 @@ export class CardDetailPanel {
       if (msg.command === 'commentAdded') {
         var ta = document.getElementById('new-comment');
         if (ta) ta.value = '';
-        location.reload();
+        // Recarregar após pequeno delay para evitar flicker
+        setTimeout(function() { location.reload(); }, 100);
       } else if (msg.command === 'commentDeleted') {
-        location.reload();
+        setTimeout(function() { location.reload(); }, 100);
       } else if (msg.command === 'commentError') {
         var btn = document.getElementById('add-comment-btn');
         if (btn) {
@@ -587,6 +665,73 @@ export class CardDetailPanel {
       event.stopPropagation();
       // confirm() não está disponível em webviews do VS Code — eliminar diretamente
       vscode.postMessage({ command: 'deleteComment', commentId: commentId });
+    };
+
+    // Event delegation para botões de resposta (mais fiável que inline onclick)
+    document.addEventListener('click', function(e) {
+      var replyBtn = e.target.closest('.comment-reply-btn');
+      if (replyBtn) {
+        var commentId = parseInt(replyBtn.getAttribute('data-comment-id'), 10);
+        var parentId = parseInt(replyBtn.getAttribute('data-parent-id'), 10);
+        window.showReplyBox(commentId, parentId);
+      }
+    });
+
+    // Mostrar caixa de resposta
+    window.showReplyBox = function(commentId, parentId) {
+      console.log('[showReplyBox] commentId:', commentId, 'parentId:', parentId);
+      // parentId é o ID do comentário principal (se vier null/undefined, usar commentId)
+      if (!parentId || isNaN(parentId)) parentId = commentId;
+
+      // Fechar outras caixas de resposta abertas
+      var allBoxes = document.querySelectorAll('.reply-box');
+      allBoxes.forEach(function(el) {
+        el.parentNode.removeChild(el);
+      });
+
+      // Encontrar o elemento do comentário
+      var commentEl = document.querySelector('.comment[data-comment-id="' + commentId + '"]');
+      if (!commentEl) return;
+
+      // Criar a reply-box dentro do comentário clicado
+      var replyBox = document.createElement('div');
+      replyBox.className = 'reply-box active';
+      replyBox.innerHTML = '<textarea placeholder="Escreve uma resposta..." rows="2"></textarea>' +
+        '<div class="reply-box-actions">' +
+        '<button class="reply-send-btn">Enviar</button>' +
+        '<button class="reply-cancel-btn">Cancelar</button>' +
+        '</div>';
+      commentEl.appendChild(replyBox);
+
+      // Handler para enviar
+      var sendBtn = replyBox.querySelector('.reply-send-btn');
+      console.log('[showReplyBox] sendBtn:', sendBtn, 'parentId:', parentId);
+      sendBtn.addEventListener('click', function() {
+        console.log('[showReplyBox] Send clicked, parentId:', parentId);
+        var textarea = replyBox.querySelector('textarea');
+        var content = textarea.value.trim();
+        if (content) {
+          vscode.postMessage({ command: 'addComment', cardId: window.cardId, content: content, parentId: parentId });
+        }
+      });
+
+      // Handler para cancelar
+      var cancelBtn = replyBox.querySelector('.reply-cancel-btn');
+      cancelBtn.addEventListener('click', function() {
+        replyBox.parentNode.removeChild(replyBox);
+      });
+
+      // Focus no textarea e handler para Enter/Shift+Enter
+      setTimeout(function() {
+        var textarea = replyBox.querySelector('textarea');
+        textarea.focus();
+        textarea.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendBtn.click();
+          }
+        });
+      }, 50);
     };
 
     // Funções de Anexos
