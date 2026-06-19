@@ -55,12 +55,23 @@ export interface Card {
   order?: number;
   creator_email?: string;
   attachments?: CardAttachment[];
+  project_id?: number;
 }
 
 export interface ProjectCardsResponse {
   project_id: number;
   columns: Column[];
   cards: Card[];
+  participants?: ProjectParticipant[];
+}
+
+export interface ProjectParticipant {
+  email: string;
+  name?: string;
+  role?: string;
+  permission?: string;
+  status?: number;
+  icon_url?: string;
 }
 
 export interface CreateCardPayload {

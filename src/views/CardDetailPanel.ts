@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Card, Comment, CurrentUser, boardsClient, CardAttachment } from '../api/boardsClient';
+import { Card, Comment, CurrentUser, boardsClient, CardAttachment, ProjectParticipant } from '../api/boardsClient';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -18,6 +18,7 @@ export class CardDetailPanel {
   private readonly panel: vscode.WebviewPanel;
   private card!: Card;
   private currentUser: CurrentUser | null = null;
+  private projectParticipants: ProjectParticipant[] = [];
 
   private constructor(card: Card) {
     this.card = card; // Inicializar logo para fallback
@@ -46,8 +47,20 @@ export class CardDetailPanel {
       const fullCard = await boardsClient.getCardDetails(cardId);
       this.card = fullCard;
       this.panel.title = fullCard.title;
+
+      // Buscar participantes do projeto se temos project_id
+      if (fullCard.project_id) {
+        try {
+          const projectData = await boardsClient.getProjectCards(fullCard.project_id);
+          this.projectParticipants = projectData.participants || [];
+        } catch (e) {
+          console.log('[CardDetailPanel] Não foi possível obter participantes:', e);
+          this.projectParticipants = [];
+        }
+      }
+
       const activities = await boardsClient.getComments(cardId);
-      this.panel.webview.html = this.buildHtml(fullCard, activities);
+      this.panel.webview.html = this.buildHtml(fullCard, activities, this.projectParticipants);
     } catch (err) {
       console.error('[CardDetailPanel] Erro ao carregar detalhes, a usar fallback:', err);
       // Fallback para o cartão original se falhar
@@ -63,17 +76,17 @@ export class CardDetailPanel {
         }
         try {
           const activities = await boardsClient.getComments(cardId);
-          this.panel.webview.html = this.buildHtml(fallbackCard, activities);
+          this.panel.webview.html = this.buildHtml(fallbackCard, activities, this.projectParticipants);
         } catch (e2) {
           console.error('[CardDetailPanel] Erro ao carregar comentários no fallback:', e2);
           // Mostrar mesmo sem comentários se falhar
-          this.panel.webview.html = this.buildHtml(fallbackCard, []);
+          this.panel.webview.html = this.buildHtml(fallbackCard, [], this.projectParticipants);
         }
       }
     }
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number }): Promise<void> {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number; email?: string }): Promise<void> {
     console.log('[handleMessage] command:', msg.command);
     if (msg.command === 'refreshComments' && this.card?.id) {
       console.log('[handleMessage] refreshing comments for card:', this.card.id);
@@ -177,6 +190,52 @@ export class CardDetailPanel {
         console.error('[CardDetailPanel] Erro ao abrir anexo:', err);
         vscode.window.showErrorMessage('Erro ao abrir anexo: ' + (err instanceof Error ? err.message : String(err)));
       }
+    } else if (msg.command === 'addMember' && msg.cardId && msg.email) {
+      try {
+        console.log('[CardDetailPanel] Adding member to card:', msg.cardId, 'email:', msg.email);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const currentMembers = fullCard.members || [];
+        // Verificar se já é membro
+        if (currentMembers.some((m) => m.email?.toLowerCase() === msg.email?.toLowerCase())) {
+          vscode.window.showWarningMessage('Este utilizador já é membro do cartão');
+          return;
+        }
+        // Obter dados do participante para adicionar
+        const participant = this.projectParticipants.find((p) => p.email?.toLowerCase() === msg.email?.toLowerCase());
+        const newMember = {
+          email: msg.email,
+          name: participant?.name || '',
+          icon_url: participant?.icon_url || '',
+        };
+        const newMembers = [...currentMembers, newMember];
+        await boardsClient.updateCardRaw(msg.cardId, {
+          members: newMembers,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.panel.webview.postMessage({ command: 'memberAdded', email: msg.email });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao adicionar membro:', err);
+        vscode.window.showErrorMessage('Erro ao adicionar membro: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'removeMember' && msg.cardId && msg.email) {
+      try {
+        console.log('[CardDetailPanel] Removing member from card:', msg.cardId, 'email:', msg.email);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const currentMembers = fullCard.members || [];
+        const newMembers = currentMembers.filter((m) => m.email?.toLowerCase() !== msg.email?.toLowerCase());
+        await boardsClient.updateCardRaw(msg.cardId, {
+          members: newMembers,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.panel.webview.postMessage({ command: 'memberRemoved', email: msg.email });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao remover membro:', err);
+        vscode.window.showErrorMessage('Erro ao remover membro: ' + (err instanceof Error ? err.message : String(err)));
+      }
     }
   }
 
@@ -192,7 +251,7 @@ export class CardDetailPanel {
   private async loadComments(cardId: number): Promise<void> {
     try {
       const activities = await boardsClient.getComments(cardId);
-      this.panel.webview.html = this.buildHtml(this.card, activities);
+      this.panel.webview.html = this.buildHtml(this.card, activities, this.projectParticipants);
     } catch (err) {
       console.error('Erro ao carregar comentários:', err);
     }
@@ -212,12 +271,19 @@ export class CardDetailPanel {
     return icons[type] || '📌';
   }
 
-  private buildHtml(card: Card, activities: Comment[]): string {
+  private buildHtml(card: Card, activities: Comment[], participants: ProjectParticipant[] = []): string {
     const labels = card.labels
       .map((l) => `<span class="label" style="background:${this.escape(l.color)}">${this.escape(l.text)}</span>`)
       .join('');
 
     // Mostrar membros como mini-avatar ao lado do título
+    // Obter emails dos membros atuais do cartão
+    const currentMemberEmails = new Set((card.members || []).map((m) => m.email?.toLowerCase()).filter(Boolean));
+
+    // Obter participantes disponíveis que ainda não são membros
+    const availableParticipants = (participants || []).filter((p) => !currentMemberEmails.has(p.email?.toLowerCase()));
+
+    // membersAvatars com botão de remover para cada membro
     const membersAvatars = card.members.length > 0
       ? card.members.map((m) => {
         const initial = (m.name || m.email || "?").substring(0, 1).toUpperCase();
@@ -233,10 +299,15 @@ export class CardDetailPanel {
           anyM.avatar_url ||
           anyM.img || '';
         const avatarHtml = memberIcon
-          ? `<img class="member-avatar" src="${memberIcon}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
+          ? `<img class="member-avatar member-img" src="${memberIcon}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
           : `<span class="member-avatar" title="${this.escape(m.name)}">${initial}</span>`;
-        return avatarHtml;
+        return `<div class="member-wrapper" data-email="${this.escape(m.email)}">${avatarHtml}<span class="member-remove" title="Remover membro" onclick="window.removeMember(event, '${this.escape(m.email)}')">×</span></div>`;
       }).join('')
+      : '';
+
+    // Botão de adicionar membros se houver participantes disponíveis
+    const addMemberButton = availableParticipants.length > 0
+      ? `<button class="add-member-btn" onclick="window.showAddMemberMenu(event)" title="Adicionar membro">+</button>`
       : '';
 
     const dates = (card.start_date || card.due_date)
@@ -545,6 +616,22 @@ export class CardDetailPanel {
     .dropzone-content { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
     .dropzone-icon { font-size: 1.5em; }
     .dropzone-text { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+    /* Membros */
+    .status-line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .member-wrapper { position: relative; display: inline-block; }
+    .member-avatar.member-img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+    .member-remove { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; background: #e74c3c; color: white; border-radius: 50%; font-size: 10px; line-height: 12px; text-align: center; cursor: pointer; display: none; }
+    .member-wrapper:hover .member-remove { display: block; }
+    .add-member-btn { width: 24px; height: 24px; border-radius: 50%; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; font-size: 14px; cursor: pointer; margin-left: 4px; }
+    .add-member-btn:hover { background: var(--vscode-button-hoverBackground); }
+    .add-member-menu { position: absolute; background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100; min-width: 180px; max-height: 200px; overflow-y: auto; }
+    .add-member-header { padding: 8px 12px; border-bottom: 1px solid var(--vscode-focusBorder); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .close-menu { cursor: pointer; font-size: 16px; }
+    .add-member-option { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; }
+    .add-member-option:hover { background: var(--vscode-button-hoverBackground); }
+    .option-avatar { width: 20px; height: 20px; border-radius: 50%; background: var(--vscode-button-background); display: flex; align-items: center; justify-content: center; font-size: 10px; }
+    .option-avatar img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+    .option-name { font-size: 0.9em; }
   </style>
 </head>
 <body>
@@ -554,6 +641,18 @@ export class CardDetailPanel {
   <div class="status-line">
     <span class="status">${this.escape(card.status_label)}</span>
     ${membersAvatars}
+    ${addMemberButton}
+  </div>
+  <div id="add-member-menu" class="add-member-menu" style="display:none;">
+    <div class="add-member-header">Adicionar Membro <span class="close-menu" onclick="window.closeAddMemberMenu()">×</span></div>
+    <div class="add-member-list">
+      ${availableParticipants.map((p) => `
+        <div class="add-member-option" onclick="window.addMember('${this.escape(p.email)}')">
+          ${p.icon_url ? `<img class="option-avatar" src="${p.icon_url}">` : `<span class="option-avatar">${(p.name || p.email || "?").substring(0, 1).toUpperCase()}</span>`}
+          <span class="option-name">${this.escape(p.name || p.email)}</span>
+        </div>
+      `).join('')}
+    </div>
   </div>
   <div class="priority">${PRIORITY_LABELS[card.priority] ?? card.priority}</div>
   ${dates}
@@ -907,6 +1006,34 @@ export class CardDetailPanel {
         titleEl.textContent = newTitle;
       }
     };
+
+    // Funções para adicionar/remover membros
+    window.showAddMemberMenu = function(event) {
+      event.stopPropagation();
+      var menu = document.getElementById('add-member-menu');
+      if (menu) menu.style.display = 'block';
+    };
+    window.closeAddMemberMenu = function() {
+      var menu = document.getElementById('add-member-menu');
+      if (menu) menu.style.display = 'none';
+    };
+    window.addMember = function(email) {
+      window.closeAddMemberMenu();
+      vscode.postMessage({ command: 'addMember', cardId: window.cardId, email: email });
+    };
+    window.removeMember = function(event, email) {
+      event.stopPropagation();
+      vscode.postMessage({ command: 'removeMember', cardId: window.cardId, email: email });
+    };
+
+    // Fechar menu ao clicar fora
+    document.addEventListener('click', function(event) {
+      var menu = document.getElementById('add-member-menu');
+      var btn = document.querySelector('.add-member-btn');
+      if (menu && btn && !menu.contains(event.target) && !btn.contains(event.target)) {
+        menu.style.display = 'none';
+      }
+    });
     </script>
   <div id="image-modal" onclick="window.closeModal()">
     <span class="close" onclick="window.closeModal()">&times;</span>

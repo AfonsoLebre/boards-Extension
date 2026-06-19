@@ -42,7 +42,8 @@
       "Bash(gh release view v0.2.0 --repo AfonsoLebre/boards-Extension --json assets)",
       "Bash(gh release list --repo AfonsoLebre/boards-Extension)",
       "Bash(gh release view v0.2.2 --repo AfonsoLebre/boards-Extension --json assets)",
-      "Bash(gh release upload v0.2.2 \"/c/Users/Duarte Tavares/Documents/Anturio/boards-Extension/anturio-boards-0.1.6.vsix\")"
+      "Bash(gh release upload v0.2.2 \"/c/Users/Duarte Tavares/Documents/Anturio/boards-Extension/anturio-boards-0.1.6.vsix\")",
+      "Bash(cd c:/Users/Duarte Tavares/Documents/Anturio/boards-Extension)"
     ]
   }
 }
