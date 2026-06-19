@@ -119,7 +119,11 @@ export class BoardsClient {
   }
 
   private get serverUrl(): string {
-    return this.config.get<string>('serverUrl', 'https://boards.anturio.app/api').replace(/\/$/, '');
+    let url = this.config.get<string>('serverUrl', 'https://boards.anturio.app').replace(/\/$/, '');
+    if (url.endsWith('/api')) {
+      url = url.substring(0, url.length - 4);
+    }
+    return url;
   }
 
   private get apiKey(): string {

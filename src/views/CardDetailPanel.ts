@@ -304,10 +304,14 @@ export class CardDetailPanel {
           <div class="attachments-list" id="attachments-list">
             ${listHtml}
           </div>
-          <div style="margin-top: 12px;">
+          <div class="attachment-dropzone" id="attachment-dropzone">
+            <div class="dropzone-content">
+              <span class="dropzone-icon">📥</span>
+              <span class="dropzone-text">Arraste ficheiros aqui para adicionar anexos</span>
+            </div>
             <input type="file" id="attachment-input" style="display:none;" multiple>
-            <button id="add-attachment-btn" class="attachment-button">📎 Adicionar Anexo</button>
           </div>
+          <button id="add-attachment-btn" class="attachment-button">📎 Adicionar Anexo</button>
         </section>
       `;
     })();
@@ -533,8 +537,14 @@ export class CardDetailPanel {
     .attachment-type { font-size: 0.75em; color: var(--vscode-descriptionForeground); text-transform: uppercase; }
     .attachment-delete-btn { background: transparent; border: none; color: var(--vscode-errorForeground, #f85149); cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1em; opacity: 0.7; transition: opacity 0.2s; border-radius: 4px; }
     .attachment-delete-btn:hover { opacity: 1; background: rgba(248, 81, 73, 0.1); }
-    .attachment-button { display: inline-flex; align-items: center; gap: 6px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 12px; font-size: 0.85em; cursor: pointer; margin-top: 8px; }
+    .attachment-button { display: inline-flex; align-items: center; gap: 6px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 12px; font-size: 0.85em; cursor: pointer; margin-top: 12px; }
     .attachment-button:hover { background: var(--vscode-button-hoverBackground); }
+    .attachment-dropzone { border: 2px dashed var(--vscode-focusBorder, #007fd4); border-radius: 6px; padding: 16px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--vscode-editor-background); margin-top: 12px; }
+    .attachment-dropzone:hover, .attachment-dropzone.drag-over { border-color: var(--vscode-focusBorder, #007fd4); background: var(--vscode-editor-inactiveSelectionBackground); }
+    .attachment-dropzone.drag-over { border-style: solid; transform: scale(1.02); }
+    .dropzone-content { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+    .dropzone-icon { font-size: 1.5em; }
+    .dropzone-text { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
   </style>
 </head>
 <body>
@@ -761,46 +771,78 @@ export class CardDetailPanel {
       vscode.postMessage({ command: 'deleteAttachment', cardId: window.cardId, index: idx });
     };
 
-    // Configurar o input de ficheiros e botão
+    // Configurar drag & drop para anexos
+    var attDropzone = document.getElementById('attachment-dropzone');
     var attBtn = document.getElementById('add-attachment-btn');
     var attInput = document.getElementById('attachment-input');
+
+    function handleFileSelect(files) {
+      if (!files || !files.length) return;
+      attBtn.disabled = true;
+      attBtn.textContent = 'A processar...';
+
+      var promises = Array.from(files).map(function(file) {
+        return new Promise(function(resolve) {
+          var reader = new FileReader();
+          reader.onloadend = function() {
+            resolve({
+              name: file.name,
+              url: reader.result,
+              type: file.type
+            });
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(promises).then(function(loadedFiles) {
+        vscode.postMessage({
+          command: 'addAttachments',
+          cardId: window.cardId,
+          files: loadedFiles
+        });
+        attInput.value = '';
+        attBtn.disabled = false;
+        attBtn.textContent = '📎 Adicionar Anexo';
+      }).catch(function(err) {
+        attBtn.disabled = false;
+        attBtn.textContent = '📎 Adicionar Anexo';
+        alert('Erro ao ler ficheiros: ' + err);
+      });
+    }
+
+    if (attDropzone) {
+      attDropzone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        attDropzone.classList.add('drag-over');
+      });
+      attDropzone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        attDropzone.classList.remove('drag-over');
+      });
+      attDropzone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        attDropzone.classList.remove('drag-over');
+        var files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+          handleFileSelect(files);
+        }
+      });
+      attDropzone.addEventListener('click', function() {
+        attInput?.click();
+      });
+    }
+
     if (attBtn && attInput) {
       attBtn.addEventListener('click', function() {
         attInput.click();
       });
       attInput.addEventListener('change', function(e) {
         var files = Array.from(e.target.files);
-        if (!files.length) return;
-
-        attBtn.disabled = true;
-        attBtn.textContent = 'A processar...';
-
-        var promises = files.map(function(file) {
-          return new Promise(function(resolve) {
-            var reader = new FileReader();
-            reader.onloadend = function() {
-              resolve({
-                name: file.name,
-                url: reader.result,
-                type: file.type
-              });
-            };
-            reader.readAsDataURL(file);
-          });
-        });
-
-        Promise.all(promises).then(function(loadedFiles) {
-          vscode.postMessage({
-            command: 'addAttachments',
-            cardId: window.cardId,
-            files: loadedFiles
-          });
-          attInput.value = '';
-        }).catch(function(err) {
-          attBtn.disabled = false;
-          attBtn.textContent = '📎 Adicionar Anexo';
-          alert('Erro ao ler ficheiros: ' + err);
-        });
+        handleFileSelect(files);
       });
     }
 

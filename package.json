@@ -25,8 +25,8 @@
       "properties": {
         "anturio.serverUrl": {
           "type": "string",
-          "default": "https://boards.anturio.app/api",
-          "description": "URL do servidor Anturio (ex: https://boards.anturio.app/api)"
+          "default": "https://boards.anturio.app",
+          "description": "URL do servidor Anturio (ex: https://boards.anturio.app)"
         },
         "anturio.apiKey": {
           "type": "string",
