@@ -40,6 +40,17 @@ export interface CardAttachment {
   type: string;
 }
 
+export interface ChecklistItem {
+  text: string;
+  completed?: boolean;
+  checked?: boolean; // for backwards compatibility
+}
+
+export interface Checklist {
+  title: string;
+  items: ChecklistItem[];
+}
+
 export interface Card {
   id: number;
   title: string;
@@ -56,6 +67,7 @@ export interface Card {
   creator_email?: string;
   attachments?: CardAttachment[];
   project_id?: number;
+  checklists?: Checklist[];
 }
 
 export interface ProjectCardsResponse {

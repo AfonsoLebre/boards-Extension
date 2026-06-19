@@ -86,7 +86,7 @@ export class CardDetailPanel {
     }
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number; email?: string }): Promise<void> {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number; email?: string; checklistIndex?: number; itemIndex?: number; text?: string; checked?: boolean }): Promise<void> {
     console.log('[handleMessage] command:', msg.command);
     if (msg.command === 'refreshComments' && this.card?.id) {
       console.log('[handleMessage] refreshing comments for card:', this.card.id);
@@ -236,6 +236,125 @@ export class CardDetailPanel {
         console.error('[CardDetailPanel] Erro ao remover membro:', err);
         vscode.window.showErrorMessage('Erro ao remover membro: ' + (err instanceof Error ? err.message : String(err)));
       }
+    } else if (msg.command === 'addChecklist' && msg.cardId && msg.title) {
+      try {
+        console.log('[CardDetailPanel] Adding checklist:', msg.cardId, 'title:', msg.title);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        checklists.push({ title: msg.title, items: [] });
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao adicionar checklist:', err);
+        vscode.window.showErrorMessage('Erro ao adicionar checklist: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'addChecklistItem' && msg.cardId && msg.checklistIndex !== undefined && msg.text) {
+      try {
+        console.log('[CardDetailPanel] Adding checklist item:', msg.cardId, 'checklist:', msg.checklistIndex, 'text:', msg.text);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex]) throw new Error('Checklist não encontrado');
+        checklists[msg.checklistIndex].items = checklists[msg.checklistIndex].items || [];
+        checklists[msg.checklistIndex].items.push({ text: msg.text, checked: false, completed: false });
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao adicionar item:', err);
+        vscode.window.showErrorMessage('Erro ao adicionar item: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'toggleChecklistItem' && msg.cardId && msg.checklistIndex !== undefined && msg.itemIndex !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Toggling checklist item:', msg.cardId, 'checklist:', msg.checklistIndex, 'item:', msg.itemIndex, 'checked:', msg.checked);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex] || !checklists[msg.checklistIndex].items) throw new Error('Item não encontrado');
+        checklists[msg.checklistIndex].items[msg.itemIndex].checked = msg.checked;
+        checklists[msg.checklistIndex].items[msg.itemIndex].completed = msg.checked;
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao marcar item:', err);
+        vscode.window.showErrorMessage('Erro ao atualizar item: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'deleteChecklistItem' && msg.cardId && msg.checklistIndex !== undefined && msg.itemIndex !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Deleting checklist item:', msg.cardId, 'checklist:', msg.checklistIndex, 'item:', msg.itemIndex);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex] || !checklists[msg.checklistIndex].items) throw new Error('Item não encontrado');
+        checklists[msg.checklistIndex].items.splice(msg.itemIndex, 1);
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao eliminar item:', err);
+        vscode.window.showErrorMessage('Erro ao eliminar item: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'deleteChecklist' && msg.cardId && msg.checklistIndex !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Deleting checklist:', msg.cardId, 'checklist:', msg.checklistIndex);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        checklists.splice(msg.checklistIndex, 1);
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao eliminar checklist:', err);
+        vscode.window.showErrorMessage('Erro ao eliminar checklist: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'updateChecklistTitle' && msg.cardId && msg.checklistIndex !== undefined && msg.title !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Updating checklist title:', msg.cardId, 'checklist:', msg.checklistIndex, 'title:', msg.title);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex]) throw new Error('Checklist não encontrado');
+        checklists[msg.checklistIndex].title = msg.title;
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao atualizar título:', err);
+        vscode.window.showErrorMessage('Erro ao atualizar título: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'updateChecklistItemText' && msg.cardId && msg.checklistIndex !== undefined && msg.itemIndex !== undefined && msg.text !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Updating checklist item text:', msg.cardId, 'checklist:', msg.checklistIndex, 'item:', msg.itemIndex, 'text:', msg.text);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex] || !checklists[msg.checklistIndex].items[msg.itemIndex]) throw new Error('Item não encontrado');
+        checklists[msg.checklistIndex].items[msg.itemIndex].text = msg.text;
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao atualizar item:', err);
+        vscode.window.showErrorMessage('Erro ao atualizar item: ' + (err instanceof Error ? err.message : String(err)));
+      }
     }
   }
 
@@ -383,6 +502,57 @@ export class CardDetailPanel {
             <input type="file" id="attachment-input" style="display:none;" multiple>
           </div>
           <button id="add-attachment-btn" class="attachment-button">📎 Adicionar Anexo</button>
+        </section>
+      `;
+    })();
+
+    // Checklists UI
+    const checklistsHtml = (() => {
+      const checklists = card.checklists || [];
+      const listHtml = checklists.length > 0
+        ? checklists.map((cl, idx) => {
+          const itemsHtml = cl.items?.length > 0
+            ? cl.items.map((item, itemIdx) => {
+              const isChecked = item.completed || item.checked || false;
+              return `
+              <div class="checklist-item">
+                <input type="checkbox" class="checklist-checkbox" ${isChecked ? 'checked' : ''} onchange="window.toggleChecklistItem(${idx}, ${itemIdx}, this.checked)">
+                <span class="checklist-item-text ${isChecked ? 'checked' : ''}" ondblclick="window.editChecklistItemText(${idx}, ${itemIdx})">${this.escape(item.text)}</span>
+                <input type="text" class="checklist-item-input" id="checklist-item-edit-${idx}-${itemIdx}" value="${this.escape(item.text)}" style="display:none">
+                <button class="checklist-item-delete" onclick="window.deleteChecklistItem(${idx}, ${itemIdx})" title="Eliminar">×</button>
+              </div>
+            `}).join('')
+            : '<p class="meta">Sem itens.</p>';
+          const checkedCount = cl.items?.filter((i) => i.completed || i.checked).length || 0;
+          const totalCount = cl.items?.length || 0;
+          return `
+            <div class="checklist-section">
+              <div class="checklist-header">
+                <span class="checklist-title" ondblclick="window.editChecklistTitle(${idx})">${this.escape(cl.title)}</span>
+                <input type="text" class="checklist-title-input" id="checklist-title-edit-${idx}" value="${this.escape(cl.title)}" style="display:none">
+                <span class="checklist-progress">${checkedCount}/${totalCount}</span>
+                <button class="checklist-delete-btn" onclick="window.deleteChecklist(${idx})" title="Eliminar checklist">🗑</button>
+              </div>
+              <div class="checklist-items">${itemsHtml}</div>
+              <div class="checklist-add-item">
+                <input type="text" class="checklist-new-item-input" placeholder="Novo item..." onkeypress="window.addChecklistItemKeypress(event, ${idx})">
+                <button class="checklist-add-item-btn" onclick="window.addChecklistItem(${idx})">+</button>
+              </div>
+            </div>
+          `;
+        }).join('')
+        : '';
+
+      return `
+        <section>
+          <h3>Checklists (<span id="checklists-count">${checklists.length}</span>)</h3>
+          <div class="checklists-list" id="checklists-list">
+            ${listHtml}
+          </div>
+          <div class="checklist-add-section">
+            <input type="text" id="checklist-title-input" class="checklist-title-input" placeholder="Título do nova checklist..." onkeypress="if(event.key==='Enter')window.addChecklist()">
+            <button id="add-checklist-btn" class="checklist-button" onclick="window.addChecklist()">+ Criar Checklist</button>
+          </div>
         </section>
       `;
     })();
@@ -616,6 +786,30 @@ export class CardDetailPanel {
     .dropzone-content { display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
     .dropzone-icon { font-size: 1.5em; }
     .dropzone-text { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+    /* Checklists */
+    .checklist-section { background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+    .checklist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .checklist-title { font-weight: bold; cursor: text; }
+    .checklist-title:hover { background: var(--vscode-editorHighlightBackground); border-radius: 3px; }
+    .checklist-title-input { flex: 1; padding: 2px 6px; border: 1px solid var(--vscode-focusBorder); border-radius: 3px; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-weight: bold; font-size: inherit; }
+    .checklist-progress { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+    .checklist-delete-btn { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; }
+    .checklist-delete-btn:hover { opacity: 1; }
+    .checklist-items { margin-bottom: 8px; }
+    .checklist-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .checklist-item-text { flex: 1; cursor: text; }
+    .checklist-item-text:hover { background: var(--vscode-editorHighlightBackground); border-radius: 3px; }
+    .checklist-item-text.checked { text-decoration: line-through; opacity: 0.6; }
+    .checklist-item-input { flex: 1; padding: 2px 6px; border: 1px solid var(--vscode-focusBorder); border-radius: 3px; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-size: inherit; }
+    .checklist-item-delete { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; }
+    .checklist-item-delete:hover { opacity: 1; }
+    .checklist-add-item { display: flex; gap: 8px; margin-top: 8px; }
+    .checklist-new-item-input { flex: 1; padding: 4px 8px; border: 1px solid var(--vscode-focusBorder); border-radius: 4px; background: var(--vscode-editor-background); color: var(--vscode-foreground); }
+    .checklist-add-item-btn { padding: 4px 12px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; cursor: pointer; }
+    .checklist-add-section { display: flex; gap: 8px; margin-top: 12px; }
+    .checklist-title-input { flex: 1; padding: 6px 8px; border: 1px solid var(--vscode-focusBorder); border-radius: 4px; background: var(--vscode-editor-background); color: var(--vscode-foreground); }
+    .checklist-button { padding: 6px 12px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; cursor: pointer; }
+    .checklist-button:hover { background: var(--vscode-button-hoverBackground); }
     /* Membros */
     .status-line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     .member-wrapper { position: relative; display: inline-block; }
@@ -657,6 +851,7 @@ export class CardDetailPanel {
   <div class="priority">${PRIORITY_LABELS[card.priority] ?? card.priority}</div>
   ${dates}
   <div class="labels">${labels}</div>
+  ${checklistsHtml}
   ${descriptionHtml}
   ${attachmentsHtml}
   ${commentsHtml}
@@ -1026,12 +1221,167 @@ export class CardDetailPanel {
       vscode.postMessage({ command: 'removeMember', cardId: window.cardId, email: email });
     };
 
+    // Checklists
+    window.addChecklist = function() {
+      var titleInput = document.getElementById('checklist-title-input');
+      if (!titleInput || !titleInput.value.trim()) {
+        alert('Digite o título do checklist');
+        return;
+      }
+      vscode.postMessage({ command: 'addChecklist', cardId: window.cardId, title: titleInput.value.trim() });
+      titleInput.value = '';
+    };
+    window.addChecklistItemKeypress = function(event, idx) {
+      if (event.key === 'Enter') {
+        window.addChecklistItem(idx);
+      }
+    };
+    window.addChecklistItem = function(idx) {
+      var section = document.querySelectorAll('.checklist-section')[idx];
+      if (!section) return;
+      var input = section.querySelector('.checklist-new-item-input');
+      if (!input || !input.value.trim()) {
+        return;
+      }
+      vscode.postMessage({ command: 'addChecklistItem', cardId: window.cardId, checklistIndex: idx, text: input.value.trim() });
+      input.value = '';
+    };
+    window.toggleChecklistItem = function(checklistIdx, itemIdx, checked) {
+      vscode.postMessage({ command: 'toggleChecklistItem', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx, checked: checked });
+    };
+    window.deleteChecklistItem = function(checklistIdx, itemIdx) {
+      vscode.postMessage({ command: 'deleteChecklistItem', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx });
+    };
+    window.editChecklistItemText = function(checklistIdx, itemIdx) {
+      var textSpan = document.querySelectorAll('.checklist-item-text')[checklistIdx * 100 + itemIdx];
+      var textInput = document.getElementById('checklist-item-edit-' + checklistIdx + '-' + itemIdx);
+      if (textSpan && textInput) {
+        textInput.setAttribute('data-original', textSpan.textContent);
+        textInput.value = textSpan.textContent;
+        textSpan.style.display = 'none';
+        textInput.style.display = 'inline-block';
+        textInput.focus();
+        textInput.select();
+        // Add blur listener to save on blur
+        textInput.onblur = function() {
+          window.saveChecklistItemText(checklistIdx, itemIdx);
+        };
+      }
+    };
+    window.saveChecklistItemTextKeypress = function(event, checklistIdx, itemIdx) {
+      if (event.key === 'Enter') {
+        window.saveChecklistItemText(checklistIdx, itemIdx);
+      } else if (event.key === 'Escape') {
+        window.cancelChecklistItemTextEdit(checklistIdx, itemIdx);
+      }
+    };
+    window.saveChecklistItemText = function(checklistIdx, itemIdx) {
+      var textSpan = document.querySelectorAll('.checklist-item-text')[checklistIdx * 100 + itemIdx];
+      var textInput = document.getElementById('checklist-item-edit-' + checklistIdx + '-' + itemIdx);
+      if (textSpan && textInput) {
+        var newText = textInput.value.trim();
+        if (newText) {
+          vscode.postMessage({ command: 'updateChecklistItemText', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx, text: newText });
+        }
+        textInput.style.display = 'none';
+        textSpan.style.display = 'inline';
+      }
+    };
+    window.cancelChecklistItemTextEdit = function(checklistIdx, itemIdx) {
+      var textSpan = document.querySelectorAll('.checklist-item-text')[checklistIdx * 100 + itemIdx];
+      var textInput = document.getElementById('checklist-item-edit-' + checklistIdx + '-' + itemIdx);
+      if (textSpan && textInput) {
+        var originalText = textInput.getAttribute('data-original') || '';
+        textInput.value = originalText;
+        textInput.style.display = 'none';
+        textSpan.style.display = 'inline';
+      }
+    };
+    window.editChecklistTitle = function(checklistIdx) {
+      var titleSpan = document.querySelectorAll('.checklist-title')[checklistIdx];
+      var titleInput = document.getElementById('checklist-title-edit-' + checklistIdx);
+      if (titleSpan && titleInput) {
+        // Store original value
+        titleInput.setAttribute('data-original', titleSpan.textContent);
+        titleInput.value = titleSpan.textContent;
+        titleSpan.style.display = 'none';
+        titleInput.style.display = 'inline-block';
+        titleInput.focus();
+        titleInput.select();
+        // Add blur listener to save on blur
+        titleInput.onblur = function() {
+          window.saveChecklistTitle(checklistIdx);
+        };
+      }
+    };
+    window.saveChecklistTitleKeypress = function(event, checklistIdx) {
+      if (event.key === 'Enter') {
+        window.saveChecklistTitle(checklistIdx);
+      } else if (event.key === 'Escape') {
+        window.cancelChecklistTitleEdit(checklistIdx);
+      }
+    };
+    window.cancelChecklistTitleEdit = function(checklistIdx) {
+      var titleSpan = document.querySelectorAll('.checklist-title')[checklistIdx];
+      var titleInput = document.getElementById('checklist-title-edit-' + checklistIdx);
+      if (titleSpan && titleInput) {
+        var originalTitle = titleInput.getAttribute('data-original') || '';
+        titleInput.value = originalTitle;
+        titleInput.style.display = 'none';
+        titleSpan.style.display = 'inline';
+      }
+    };
+    window.saveChecklistTitle = function(checklistIdx) {
+      var titleSpan = document.querySelectorAll('.checklist-title')[checklistIdx];
+      var titleInput = document.getElementById('checklist-title-edit-' + checklistIdx);
+      if (titleSpan && titleInput) {
+        var newTitle = titleInput.value.trim();
+        if (newTitle) {
+          vscode.postMessage({ command: 'updateChecklistTitle', cardId: window.cardId, checklistIndex: checklistIdx, title: newTitle });
+        }
+        titleInput.style.display = 'none';
+        titleSpan.style.display = 'inline';
+      }
+    };
+    window.deleteChecklist = function(idx) {
+      vscode.postMessage({ command: 'deleteChecklist', cardId: window.cardId, checklistIndex: idx });
+    };
+
     // Fechar menu ao clicar fora
     document.addEventListener('click', function(event) {
       var menu = document.getElementById('add-member-menu');
       var btn = document.querySelector('.add-member-btn');
       if (menu && btn && !menu.contains(event.target) && !btn.contains(event.target)) {
         menu.style.display = 'none';
+      }
+    });
+    // Global keydown handler for Escape - cancel any active edit
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        // Find all visible inputs
+        var allInputs = document.querySelectorAll('input[type="text"]');
+        for (var k = 0; k < allInputs.length; k++) {
+          var inp = allInputs[k];
+          var style = window.getComputedStyle(inp);
+          if (style.display !== 'none') {
+            var id = inp.id || '';
+            if (id.startsWith('checklist-title-edit-')) {
+              var idx = parseInt(id.replace('checklist-title-edit-', ''));
+              window.cancelChecklistTitleEdit(idx);
+              return;
+            } else if (id.startsWith('checklist-item-edit-')) {
+              var parts = id.replace('checklist-item-edit-', '').split('-');
+              var cIdx = parseInt(parts[0]);
+              var iIdx = parseInt(parts[1]);
+              window.cancelChecklistItemTextEdit(cIdx, iIdx);
+              return;
+            } else if (id === 'title-input') {
+              window.cancelEditTitle();
+              return;
+            }
+          }
+        }
       }
     });
     </script>
