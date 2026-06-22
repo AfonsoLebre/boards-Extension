@@ -522,8 +522,9 @@ export class CardDetailPanel {
       if (descriptions.length === 0) return '';
 
       // Mostrar todas as descrições com os seus títulos
-      return descriptions.map((d) => {
-        return `<section><h3>${this.escape(d.title)}</h3><div class="description" id="desc">${this.renderDescriptionWithImages(d.content)}</div></section>`;
+      return descriptions.map((d, idx) => {
+        const safeId = 'desc-' + idx;
+        return `<section><h3><span class="section-toggle" onclick="window.toggleSection('${safeId}')">▾</span> ${this.escape(d.title)}</h3><div class="description" id="${safeId}">${this.renderDescriptionWithImages(d.content)}</div></section>`;
       }).join('');
     })();
 
@@ -555,18 +556,18 @@ export class CardDetailPanel {
 
       return `
         <section>
-          <h3>Anexos (<span id="attachments-count">${attachments.length}</span>)</h3>
+          <h3><span class="section-toggle" onclick="window.toggleSection('attachments-list')">▾</span> Anexos (<span id="attachments-count">${attachments.length}</span>)</h3>
           <div class="attachments-list" id="attachments-list">
             ${listHtml}
-          </div>
-          <div class="attachment-dropzone" id="attachment-dropzone">
-            <div class="dropzone-content">
-              <span class="dropzone-icon">📥</span>
-              <span class="dropzone-text">Arraste ficheiros aqui para adicionar anexos</span>
+            <div class="attachment-dropzone" id="attachment-dropzone">
+              <div class="dropzone-content">
+                <span class="dropzone-icon">📥</span>
+                <span class="dropzone-text">Arraste ficheiros aqui para adicionar anexos</span>
+              </div>
+              <input type="file" id="attachment-input" style="display:none;" multiple>
             </div>
-            <input type="file" id="attachment-input" style="display:none;" multiple>
+            <button id="add-attachment-btn" class="attachment-button">📎 Adicionar Anexo</button>
           </div>
-          <button id="add-attachment-btn" class="attachment-button">📎 Adicionar Anexo</button>
         </section>
       `;
     })();
@@ -632,13 +633,13 @@ export class CardDetailPanel {
 
       return `
         <section>
-          <h3>Checklists (<span id="checklists-count">${checklists.length}</span>)</h3>
+          <h3><span class="section-toggle" onclick="window.toggleSection('checklists-list')">${checklists.length > 0 ? '▾' : '▸'}</span> Checklists (<span id="checklists-count">${checklists.length}</span>)</h3>
           <div class="checklists-list" id="checklists-list">
             ${listHtml}
-          </div>
-          <div class="checklist-add-section">
-            <input type="text" id="checklist-title-input" class="checklist-title-input" placeholder="Título do nova checklist..." onkeypress="if(event.key==='Enter')window.addChecklist()">
-            <button id="add-checklist-btn" class="checklist-button" onclick="window.addChecklist()">+ Criar Checklist</button>
+            <div class="checklist-add-section">
+              <input type="text" id="checklist-title-input" class="checklist-title-input" placeholder="Título do nova checklist..." onkeypress="if(event.key==='Enter')window.addChecklist()">
+              <button id="add-checklist-btn" class="checklist-button" onclick="window.addChecklist()">+ Criar Checklist</button>
+            </div>
           </div>
         </section>
       `;
@@ -716,24 +717,24 @@ export class CardDetailPanel {
 
     const commentsHtml = `
       <section>
-        <h3>Comentários (${comments.length})</h3>
-        <div class="comments">
-          ${comments.length > 0 
-            ? comments.map((c) => renderComment(c)).join('') 
+        <h3><span class="section-toggle" onclick="window.toggleSection('comments-list')">▾</span> Comentários (${comments.length})</h3>
+        <div class="comments" id="comments-list">
+          ${comments.length > 0
+            ? comments.map((c) => renderComment(c)).join('')
             : '<p class="meta">Sem comentários ainda.</p>'}
-        </div>
-        <div class="add-comment">
-          <textarea id="new-comment" placeholder="Escreve um comentário..." rows="3"></textarea>
-          <input type="hidden" id="reply-to-comment" value="">
-          <button id="add-comment-btn" class="comment-button">Adicionar Comentário</button>
+          <div class="add-comment">
+            <textarea id="new-comment" placeholder="Escreve um comentário..." rows="3"></textarea>
+            <input type="hidden" id="reply-to-comment" value="">
+            <button id="add-comment-btn" class="comment-button">Adicionar Comentário</button>
+          </div>
         </div>
       </section>
     `;
 
     const historyHtml = history.length > 0
       ? `<section>
-          <h3>Histórico (${history.length})</h3>
-          <div class="history">
+          <h3><span class="section-toggle" onclick="window.toggleSection('history-list')">▾</span> Histórico (${history.length})</h3>
+          <div class="history" id="history-list">
             ${history.map((h) => {
         const isOwnHistory = currentUserEmail && h.user_email?.toLowerCase() === currentUserEmail;
         const historyItemClass = isOwnHistory ? 'history-item is-own-history' : 'history-item';
@@ -926,6 +927,8 @@ export class CardDetailPanel {
     .option-avatar { width: 20px; height: 20px; border-radius: 50%; background: var(--vscode-button-background); display: flex; align-items: center; justify-content: center; font-size: 10px; }
     .option-avatar img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
     .option-name { font-size: 0.9em; }
+    .section-toggle { cursor: pointer; margin-right: 4px; }
+    .section-toggle:hover { opacity: 0.7; }
   </style>
 </head>
 <body>
@@ -1376,6 +1379,21 @@ export class CardDetailPanel {
       }
       var menu = document.getElementById('checklist-item-member-menu-' + checklistIdx + '-' + itemIdx);
       if (menu) menu.style.display = 'none';
+    };
+    // Toggle section collapse/expand
+    window.toggleSection = function(sectionId) {
+      var el = document.getElementById(sectionId);
+      var h3 = el ? el.previousElementSibling : null;
+      var toggle = h3 ? h3.querySelector('.section-toggle') : null;
+      if (el) {
+        if (el.style.display === 'none') {
+          el.style.display = '';
+          if (toggle) toggle.textContent = '▾';
+        } else {
+          el.style.display = 'none';
+          if (toggle) toggle.textContent = '▸';
+        }
+      }
     };
     // Close member menus when clicking outside
     document.addEventListener('click', function(event) {
