@@ -252,6 +252,60 @@ export class CardDetailPanel {
         console.error('[CardDetailPanel] Erro ao adicionar checklist:', err);
         vscode.window.showErrorMessage('Erro ao adicionar checklist: ' + (err instanceof Error ? err.message : String(err)));
       }
+    } else if (msg.command === 'addDescription' && msg.cardId && msg.title && msg.content) {
+      try {
+        console.log('[CardDetailPanel] Adding description:', msg.cardId, 'title:', msg.title);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const descriptions = fullCard.descriptions || [];
+        descriptions.push({ title: msg.title, content: msg.content });
+        await boardsClient.updateCardRaw(msg.cardId, {
+          descriptions,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao adicionar descrição:', err);
+        vscode.window.showErrorMessage('Erro ao adicionar descrição: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'updateDescription' && msg.cardId && msg.index !== undefined && msg.title !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Updating description:', msg.cardId, 'index:', msg.index, 'title:', msg.title, 'content:', msg.content);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const descriptions = fullCard.descriptions || [];
+        if (!descriptions[msg.index]) throw new Error('Descrição não encontrada');
+        descriptions[msg.index] = { ...descriptions[msg.index], title: msg.title, content: msg.content || descriptions[msg.index].content };
+        await boardsClient.updateCardRaw(msg.cardId, {
+          descriptions,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao actualizar descrição:', err);
+        vscode.window.showErrorMessage('Erro ao actualizar descrição: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'deleteDescription' && msg.cardId && msg.index !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Deleting description:', msg.cardId, 'index:', msg.index, 'type:', typeof msg.index);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        console.log('[CardDetailPanel] Current descriptions:', fullCard.descriptions);
+        const descriptions = fullCard.descriptions || [];
+        if (msg.index < 0 || msg.index >= descriptions.length) {
+          throw new Error('Índice inválido: ' + msg.index + ', total: ' + descriptions.length);
+        }
+        descriptions.splice(msg.index, 1);
+        console.log('[CardDetailPanel] After splice, descriptions:', descriptions);
+        await boardsClient.updateCardRaw(msg.cardId, {
+          descriptions,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao eliminar descrição:', err);
+        vscode.window.showErrorMessage('Erro ao eliminar descrição: ' + (err instanceof Error ? err.message : String(err)));
+      }
     } else if (msg.command === 'addChecklistItem' && msg.cardId && msg.checklistIndex !== undefined && msg.text) {
       try {
         console.log('[CardDetailPanel] Adding checklist item:', msg.cardId, 'checklist:', msg.checklistIndex, 'text:', msg.text);
@@ -508,8 +562,9 @@ export class CardDetailPanel {
       // Primeiro verificar se há descrições no array
       if (card.descriptions && card.descriptions.length > 0) {
         card.descriptions.forEach((d) => {
-          if (d.content && d.content.trim()) {
-            descriptions.push({ title: d.title || 'Descrição', content: d.content });
+          // Incluir todas as descrições, incluindo as vazias (para novas descrições)
+          if (d.content !== undefined) {
+            descriptions.push({ title: d.title || 'Descrição', content: d.content || '' });
           }
         });
       }
@@ -519,13 +574,58 @@ export class CardDetailPanel {
         descriptions.push({ title: 'Descrição', content: card.description });
       }
 
-      if (descriptions.length === 0) return '';
+      if (descriptions.length === 0) {
+        // Se não há descrições, mostrar secção vazia com botão para adicionar
+        return `
+          <section>
+            <h3><span class="section-toggle" onclick="window.toggleSection('descriptions-section')">▾</span> Descrições</h3>
+            <div class="descriptions-all" id="descriptions-section">
+              <button class="description-add-button" onclick="window.addDescription()">+ Adicionar Descrição</button>
+            </div>
+          </section>
+        `;
+      }
+
+      const descriptionsCount = descriptions.length;
+
+      // Função para renderizar uma descrição
+      const renderDescription = (d: { title: string; content: string; id?: number }, idx: number) => {
+        const safeId = 'desc-' + idx;
+        const showDeleteBtn = descriptionsCount > 1;
+        return `
+          <section class="description-section" data-desc-id="${d.id || ''}" data-desc-idx="${idx}">
+            <h3>
+              <span class="section-toggle" onclick="window.toggleSection('${safeId}')">▾</span>
+              <span class="description-title-text" ondblclick="window.editDescriptionTitle(${idx})">${this.escape(d.title)}</span>
+              <input type="text" class="description-title-input" id="description-title-edit-${idx}" value="${this.escape(d.title)}" style="display:none">
+              ${showDeleteBtn ? `<button class="description-delete-btn" onclick="event.stopPropagation(); window.deleteDescription(${idx})" title="Eliminar descrição">🗑</button>` : ''}
+            </h3>
+            <div class="description-content" id="${safeId}">
+              <div class="description-text" ondblclick="window.editDescriptionContent(${idx})">${this.renderDescriptionWithImages(d.content)}</div>
+              <textarea class="description-textarea" id="description-edit-${idx}" style="display:none">${this.escape(d.content)}</textarea>
+              <div class="description-edit-hint" style="display:none">Enter para guardar | Esc para cancelar</div>
+            </div>
+          </section>
+        `;
+      };
 
       // Mostrar todas as descrições com os seus títulos
-      return descriptions.map((d, idx) => {
-        const safeId = 'desc-' + idx;
-        return `<section><h3><span class="section-toggle" onclick="window.toggleSection('${safeId}')">▾</span> ${this.escape(d.title)}</h3><div class="description" id="${safeId}">${this.renderDescriptionWithImages(d.content)}</div></section>`;
-      }).join('');
+      const descriptionsHtml = descriptions.map((d, idx) => renderDescription(d, idx)).join('');
+
+      // UI para adicionar nova descrição (apenas um botão)
+      const addDescriptionHtml = `
+        <button class="description-add-button" onclick="window.addDescription()">+ Adicionar Descrição</button>
+      `;
+
+      return `
+        <section>
+          <h3><span class="section-toggle" onclick="window.toggleSection('descriptions-section')">▾</span> Descrições</h3>
+          <div class="descriptions-all" id="descriptions-section">
+            ${descriptionsHtml}
+            ${addDescriptionHtml}
+          </div>
+        </section>
+      `;
     })();
 
     const attachmentsHtml = (() => {
@@ -613,18 +713,22 @@ export class CardDetailPanel {
             : '<p class="meta">Sem itens.</p>';
           const checkedCount = cl.items?.filter((i) => i.completed || i.checked).length || 0;
           const totalCount = cl.items?.length || 0;
+          const checklistId = 'checklist-' + idx;
           return `
             <div class="checklist-section">
               <div class="checklist-header">
+                <span class="section-toggle" onclick="window.toggleSection('${checklistId}-content')">▾</span>
                 <span class="checklist-title" ondblclick="window.editChecklistTitle(${idx})">${this.escape(cl.title)}</span>
                 <input type="text" class="checklist-title-input" id="checklist-title-edit-${idx}" value="${this.escape(cl.title)}" style="display:none">
                 <span class="checklist-progress">${checkedCount}/${totalCount}</span>
                 <button class="checklist-delete-btn" onclick="window.deleteChecklist(${idx})" title="Eliminar checklist">🗑</button>
               </div>
-              <div class="checklist-items">${itemsHtml}</div>
-              <div class="checklist-add-item">
-                <input type="text" class="checklist-new-item-input" placeholder="Novo item..." onkeypress="window.addChecklistItemKeypress(event, ${idx})">
-                <button class="checklist-add-item-btn" onclick="window.addChecklistItem(${idx})">+</button>
+              <div id="${checklistId}-content">
+                <div class="checklist-items">${itemsHtml}</div>
+                <div class="checklist-add-item">
+                  <input type="text" class="checklist-new-item-input" placeholder="Novo item..." onkeypress="window.addChecklistItemKeypress(event, ${idx})">
+                  <button class="checklist-add-item-btn" onclick="window.addChecklistItem(${idx})">+</button>
+                </div>
               </div>
             </div>
           `;
@@ -786,6 +890,24 @@ export class CardDetailPanel {
     .description { white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
     .description p { margin: 0 0 8px 0; }
     .description img { max-width: 100%; height: auto; border-radius: 4px; margin: 8px 0; }
+    .description-section { background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+    .description-section h3 { display: flex; align-items: center; gap: 4px; }
+    .description-title-text { cursor: pointer; }
+    .description-title-text:hover { text-decoration: underline; }
+    .description-title-input { font-size: 0.9em; font-weight: bold; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 2px 6px; }
+    .description-delete-btn { background: transparent; border: none; cursor: pointer; padding: 2px 4px; font-size: 0.8em; opacity: 0.6; margin-left: auto; pointer-events: auto; }
+    .description-delete-btn:hover { opacity: 1; }
+    .description-content { margin-top: 8px; }
+    .description-text { cursor: pointer; white-space: pre-wrap; word-break: break-word; }
+    .description-text:hover { background: var(--vscode-editor-background); }
+    .description-textarea { width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 100px; }
+    .description-edit-hint { font-size: 0.8em; color: var(--vscode-descriptionForeground); margin-top: 4px; }
+    .add-description-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--vscode-panel-border); }
+    .add-description-form { display: flex; flex-direction: column; gap: 8px; }
+    .new-description-title-input { background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; }
+    .new-description-content-input { background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 80px; }
+    .description-add-button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 8px 12px; font-size: 0.85em; cursor: pointer; align-self: flex-start; }
+    .description-add-button:hover { background: var(--vscode-button-hoverBackground); }
     .comments { display: flex; flex-direction: column; gap: 12px; }
     .comment { background: var(--vscode-textBlockQuote-background); border-radius: 6px; padding: 10px 12px; max-width: 80%; }
     .comment.is-reply { margin-left: 24px; max-width: calc(80% - 24px); background: var(--vscode-editorWidget-background); border-left: 3px solid var(--vscode-focusBorder); }
@@ -1334,6 +1456,117 @@ export class CardDetailPanel {
       vscode.postMessage({ command: 'addChecklist', cardId: window.cardId, title: titleInput.value.trim() });
       titleInput.value = '';
     };
+    // Descriptions
+    window.addDescription = function() {
+      // Cria uma nova descrição com título "Nova Descrição" e conteúdo padrão
+      vscode.postMessage({ command: 'addDescription', cardId: window.cardId, title: 'Nova Descrição', content: 'Adicione uma descrição detalhada...' });
+    };
+    window.editDescriptionTitle = function(idx) {
+      var titleSpan = document.querySelectorAll('.description-title-text')[idx];
+      var titleInput = document.getElementById('description-title-edit-' + idx);
+      if (titleSpan && titleInput) {
+        titleInput.setAttribute('data-original', titleSpan.textContent);
+        titleInput.value = titleSpan.textContent;
+        titleSpan.style.display = 'none';
+        titleInput.style.display = 'inline-block';
+        titleInput.focus();
+        titleInput.onblur = function() {
+          window.saveDescriptionTitle(idx);
+        };
+        titleInput.onkeydown = function(event) {
+          event.stopPropagation();
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            window.saveDescriptionTitle(idx);
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            window.cancelDescriptionTitleEdit(idx);
+          }
+        };
+      }
+    };
+    window.saveDescriptionTitle = function(idx) {
+      var titleSpan = document.querySelectorAll('.description-title-text')[idx];
+      var titleInput = document.getElementById('description-title-edit-' + idx);
+      var contentDiv = document.querySelectorAll('.description-text')[idx];
+      var contentArea = document.getElementById('description-edit-' + idx);
+      if (titleSpan && titleInput && contentDiv) {
+        var newTitle = titleInput.value.trim();
+        if (newTitle) {
+          vscode.postMessage({ command: 'updateDescription', cardId: window.cardId, index: idx, title: newTitle, content: contentDiv.textContent });
+        }
+        titleInput.style.display = 'none';
+        titleSpan.style.display = '';
+      }
+    };
+    window.cancelDescriptionTitleEdit = function(idx) {
+      var titleSpan = document.querySelectorAll('.description-title-text')[idx];
+      var titleInput = document.getElementById('description-title-edit-' + idx);
+      if (titleSpan && titleInput) {
+        var original = titleInput.getAttribute('data-original') || titleSpan.textContent;
+        titleInput.value = original;
+        titleInput.style.display = 'none';
+        titleSpan.style.display = '';
+      }
+    };
+    window.cancelDescriptionContentEdit = function(idx) {
+      var contentDiv = document.querySelectorAll('.description-text')[idx];
+      var contentArea = document.getElementById('description-edit-' + idx);
+      var hint = contentArea ? contentArea.nextElementSibling : null;
+      if (contentDiv && contentArea) {
+        var original = contentArea.getAttribute('data-original') || contentDiv.textContent;
+        contentArea.value = original;
+        contentArea.style.display = 'none';
+        contentDiv.style.display = '';
+        if (hint) hint.style.display = 'none';
+      }
+    };
+    window.editDescriptionContent = function(idx) {
+      var contentDiv = document.querySelectorAll('.description-text')[idx];
+      var contentArea = document.getElementById('description-edit-' + idx);
+      var hint = contentArea ? contentArea.nextElementSibling : null;
+      if (contentDiv && contentArea) {
+        contentArea.setAttribute('data-original', contentDiv.textContent);
+        contentArea.value = contentDiv.textContent;
+        contentDiv.style.display = 'none';
+        contentArea.style.display = 'block';
+        contentArea.focus();
+        contentArea.onblur = function() {
+          window.saveDescriptionContent(idx);
+        };
+        contentArea.onkeydown = function(event) {
+          event.stopPropagation();
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            window.saveDescriptionContent(idx);
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            window.cancelDescriptionContentEdit(idx);
+          }
+          // Shift+Enter faz nova linha automaticamente
+        };
+        if (hint) hint.style.display = 'block';
+      }
+    };
+    window.saveDescriptionContent = function(idx) {
+      var contentDiv = document.querySelectorAll('.description-text')[idx];
+      var contentArea = document.getElementById('description-edit-' + idx);
+      var hint = contentArea ? contentArea.nextElementSibling : null;
+      if (contentDiv && contentArea) {
+        var newContent = contentArea.value.trim();
+        if (newContent) {
+          var titleSpan = document.querySelectorAll('.description-title-text')[idx];
+          vscode.postMessage({ command: 'updateDescription', cardId: window.cardId, index: idx, title: titleSpan.textContent, content: newContent });
+        }
+        contentArea.style.display = 'none';
+        contentDiv.style.display = '';
+        if (hint) hint.style.display = 'none';
+      }
+    };
+    window.deleteDescription = function(idx) {
+      console.log('[deleteDescription] Deleting description at index:', idx);
+      vscode.postMessage({ command: 'deleteDescription', cardId: window.cardId, index: idx });
+    };
     window.addChecklistItemKeypress = function(event, idx) {
       if (event.key === 'Enter') {
         window.addChecklistItem(idx);
@@ -1508,10 +1741,11 @@ export class CardDetailPanel {
     });
     // Global keydown handler for Escape - cancel any active edit
     document.addEventListener('keydown', function(e) {
+      // Escape key - cancel editing
       if (e.key === 'Escape') {
         e.preventDefault();
-        // Find all visible inputs
-        var allInputs = document.querySelectorAll('input[type="text"]');
+        // Find all visible inputs and textareas
+        var allInputs = document.querySelectorAll('input[type="text"], textarea');
         for (var k = 0; k < allInputs.length; k++) {
           var inp = allInputs[k];
           var style = window.getComputedStyle(inp);
@@ -1530,9 +1764,44 @@ export class CardDetailPanel {
             } else if (id === 'title-input') {
               window.cancelEditTitle();
               return;
+            } else if (id.startsWith('description-title-edit-')) {
+              var idx = parseInt(id.replace('description-title-edit-', ''));
+              window.cancelDescriptionTitleEdit(idx);
+              return;
+            } else if (id.startsWith('description-edit-')) {
+              var idx = parseInt(id.replace('description-edit-', ''));
+              window.cancelDescriptionContentEdit(idx);
+              return;
             }
           }
         }
+      }
+      // Enter key in inputs - save (not in textarea unless Shift is NOT pressed)
+      if (e.key === 'Enter' && (e.target.tagName === 'INPUT' || (e.target.tagName === 'TEXTAREA' && !e.shiftKey))) {
+        if (e.target.tagName === 'TEXTAREA') {
+          // In textarea, Enter without Shift saves
+          e.preventDefault();
+        }
+        var inp = e.target;
+        var id = inp.id || '';
+        if (id.startsWith('checklist-title-edit-')) {
+          var idx = parseInt(id.replace('checklist-title-edit-', ''));
+          window.saveChecklistTitle(idx);
+        } else if (id.startsWith('checklist-item-edit-')) {
+          var parts = id.replace('checklist-item-edit-', '').split('-');
+          var cIdx = parseInt(parts[0]);
+          var iIdx = parseInt(parts[1]);
+          window.saveChecklistItemText(cIdx, iIdx);
+        } else if (id === 'title-input') {
+          window.saveEditTitle();
+        } else if (id.startsWith('description-title-edit-')) {
+          var idx = parseInt(id.replace('description-title-edit-', ''));
+          window.saveDescriptionTitle(idx);
+        } else if (id.startsWith('description-edit-')) {
+          var idx = parseInt(id.replace('description-edit-', ''));
+          window.saveDescriptionContent(idx);
+        }
+        return;
       }
     });
     </script>

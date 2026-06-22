@@ -29,7 +29,7 @@ export interface CardLabel {
 }
 
 export interface CardDescription {
-  id: number;
+  id?: number;
   title: string;
   content: string;
 }
