@@ -355,6 +355,71 @@ export class CardDetailPanel {
         console.error('[CardDetailPanel] Erro ao atualizar item:', err);
         vscode.window.showErrorMessage('Erro ao atualizar item: ' + (err instanceof Error ? err.message : String(err)));
       }
+    } else if (msg.command === 'toggleChecklistItemMember' && msg.cardId && msg.checklistIndex !== undefined && msg.itemIndex !== undefined && msg.email) {
+      try {
+        console.log('[CardDetailPanel] Toggling checklist item member:', msg.cardId, 'checklist:', msg.checklistIndex, 'item:', msg.itemIndex, 'email:', msg.email);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex] || !checklists[msg.checklistIndex].items[msg.itemIndex]) throw new Error('Item não encontrado');
+
+        const item = checklists[msg.checklistIndex].items[msg.itemIndex];
+        const currentMembers = item.assignedMembers || [];
+        const memberIndex = currentMembers.findIndex(m => m.email === msg.email);
+
+        // Find participant details
+        const participant = this.projectParticipants.find(p => p.email === msg.email);
+
+        if (memberIndex >= 0) {
+          // Remove member
+          item.assignedMembers = currentMembers.filter(m => m.email !== msg.email);
+        } else {
+          // Add member
+          item.assignedMembers = [...currentMembers, {
+            email: msg.email,
+            name: participant?.name || msg.email,
+            icon_url: participant?.icon_url
+          }];
+        }
+
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao atualizar membro do item:', err);
+        vscode.window.showErrorMessage('Erro ao atualizar membro: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'removeChecklistItemMembers' && msg.cardId && msg.checklistIndex !== undefined && msg.itemIndex !== undefined) {
+      try {
+        console.log('[CardDetailPanel] Removing all checklist item members:', msg.cardId, 'checklist:', msg.checklistIndex, 'item:', msg.itemIndex);
+        const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        const checklists = fullCard.checklists || [];
+        if (!checklists[msg.checklistIndex] || !checklists[msg.checklistIndex].items[msg.itemIndex]) throw new Error('Item não encontrado');
+
+        checklists[msg.checklistIndex].items[msg.itemIndex].assignedMembers = [];
+
+        await boardsClient.updateCardRaw(msg.cardId, {
+          checklists,
+          user_email: this.currentUser?.email,
+          user_name: this.currentUser?.name,
+        });
+        this.loadCardDetails(msg.cardId);
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao remover membros do item:', err);
+        vscode.window.showErrorMessage('Erro ao remover membros: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    } else if (msg.command === 'getProjectParticipants' && msg.cardId) {
+      try {
+        console.log('[CardDetailPanel] Getting project participants for card:', msg.cardId);
+        this.panel.webview.postMessage({
+          command: 'projectParticipants',
+          participants: this.projectParticipants
+        });
+      } catch (err) {
+        console.error('[CardDetailPanel] Erro ao obter participantes:', err);
+      }
     }
   }
 
@@ -514,11 +579,33 @@ export class CardDetailPanel {
           const itemsHtml = cl.items?.length > 0
             ? cl.items.map((item, itemIdx) => {
               const isChecked = item.completed || item.checked || false;
+              const itemMembers = item.assignedMembers || [];
+              const membersHtml = itemMembers.length > 0
+                ? itemMembers.slice(0, 2).map((m, mIdx) => `
+                    <div class="checklist-item-member-avatar" title="${this.escape(m.name || m.email)}" style="z-index: ${mIdx + 1}">
+                      ${m.icon_url ? `<img src="${this.escape(m.icon_url)}" class="checklist-item-member-img">` : this.escape((m.name || m.email || '?').substring(0, 2).toUpperCase())}
+                    </div>
+                  `).join('') + (itemMembers.length > 2 ? `<div class="checklist-item-member-overflow">+${itemMembers.length - 2}</div>` : '')
+                : '';
               return `
               <div class="checklist-item">
                 <input type="checkbox" class="checklist-checkbox" ${isChecked ? 'checked' : ''} onchange="window.toggleChecklistItem(${idx}, ${itemIdx}, this.checked)">
                 <span class="checklist-item-text ${isChecked ? 'checked' : ''}" ondblclick="window.editChecklistItemText(${idx}, ${itemIdx})">${this.escape(item.text)}</span>
                 <input type="text" class="checklist-item-input" id="checklist-item-edit-${idx}-${itemIdx}" value="${this.escape(item.text)}" style="display:none">
+                <div class="checklist-item-members">${membersHtml}</div>
+                <button class="checklist-item-member-btn" onclick="window.toggleChecklistItemMemberMenu(${idx}, ${itemIdx})" title="Membros">👤</button>
+                <div class="checklist-item-member-menu" id="checklist-item-member-menu-${idx}-${itemIdx}" style="display:none">
+                  <div class="checklist-item-member-menu-header">Membros do Item</div>
+                  <div class="checklist-item-member-menu-list">
+                    <div class="checklist-item-member-option ${!itemMembers.length ? 'selected' : ''}" onclick="window.removeChecklistItemMember(${idx}, ${itemIdx}, null)">✕ Remover todos</div>
+                    ${participants.map(p => `
+                      <div class="checklist-item-member-option ${itemMembers.some(m => m.email === p.email) ? 'selected' : ''}" onclick="window.toggleChecklistItemMember(${idx}, ${itemIdx}, '${this.escape(p.email)}')">
+                        ${p.icon_url ? `<img src="${this.escape(p.icon_url)}" class="checklist-item-member-option-img">` : this.escape((p.name || p.email || '?').substring(0, 2).toUpperCase())}
+                        <span>${this.escape(p.name || p.email)}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
                 <button class="checklist-item-delete" onclick="window.deleteChecklistItem(${idx}, ${itemIdx})" title="Eliminar">×</button>
               </div>
             `}).join('')
@@ -796,11 +883,24 @@ export class CardDetailPanel {
     .checklist-delete-btn { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; }
     .checklist-delete-btn:hover { opacity: 1; }
     .checklist-items { margin-bottom: 8px; }
-    .checklist-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
-    .checklist-item-text { flex: 1; cursor: text; }
+    .checklist-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; flex-wrap: wrap; }
+    .checklist-item-text { flex: 1; cursor: text; min-width: 100px; }
     .checklist-item-text:hover { background: var(--vscode-editorHighlightBackground); border-radius: 3px; }
     .checklist-item-text.checked { text-decoration: line-through; opacity: 0.6; }
     .checklist-item-input { flex: 1; padding: 2px 6px; border: 1px solid var(--vscode-focusBorder); border-radius: 3px; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-size: inherit; }
+    .checklist-item-members { display: flex; align-items: center; gap: 2px; }
+    .checklist-item-member-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--vscode-focusBorder); display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: var(--vscode-foreground); position: relative; margin-left: -4px; border: 2px solid var(--vscode-editor-background); }
+    .checklist-item-member-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .checklist-item-member-overflow { width: 24px; height: 24px; border-radius: 50%; background: var(--vscode-button-secondaryBackground); display: flex; align-items: center; justify-content: center; font-size: 0.65em; color: var(--vscode-foreground); margin-left: -4px; border: 2px solid var(--vscode-editor-background); }
+    .checklist-item-member-btn { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; padding: 2px; }
+    .checklist-item-member-btn:hover { opacity: 1; }
+    .checklist-item-member-menu { position: absolute; background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); border-radius: 6px; padding: 8px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3); min-width: 180px; }
+    .checklist-item-member-menu-header { font-weight: bold; font-size: 0.85em; margin-bottom: 8px; color: var(--vscode-foreground); border-bottom: 1px solid var(--vscode-focusBorder); padding-bottom: 4px; }
+    .checklist-item-member-menu-list { display: flex; flex-direction: column; gap: 2px; }
+    .checklist-item-member-option { display: flex; align-items: center; gap: 8px; padding: 6px 8px; cursor: pointer; border-radius: 4px; font-size: 0.85em; }
+    .checklist-item-member-option:hover { background: var(--vscode-button-secondaryBackground); }
+    .checklist-item-member-option.selected { background: var(--vscode-button-hoverBackground); }
+    .checklist-item-member-option-img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
     .checklist-item-delete { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; }
     .checklist-item-delete:hover { opacity: 1; }
     .checklist-add-item { display: flex; gap: 8px; margin-top: 8px; }
@@ -1252,6 +1352,39 @@ export class CardDetailPanel {
     window.deleteChecklistItem = function(checklistIdx, itemIdx) {
       vscode.postMessage({ command: 'deleteChecklistItem', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx });
     };
+    window.toggleChecklistItemMemberMenu = function(checklistIdx, itemIdx) {
+      var menu = document.getElementById('checklist-item-member-menu-' + checklistIdx + '-' + itemIdx);
+      // Close all other menus
+      document.querySelectorAll('.checklist-item-member-menu').forEach(function(m) {
+        if (m !== menu) m.style.display = 'none';
+      });
+      if (menu) {
+        menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+      }
+    };
+    window.toggleChecklistItemMember = function(checklistIdx, itemIdx, email) {
+      vscode.postMessage({ command: 'toggleChecklistItemMember', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx, email: email });
+      // Close menu
+      var menu = document.getElementById('checklist-item-member-menu-' + checklistIdx + '-' + itemIdx);
+      if (menu) menu.style.display = 'none';
+    };
+    window.removeChecklistItemMember = function(checklistIdx, itemIdx, email) {
+      if (email === null) {
+        vscode.postMessage({ command: 'removeChecklistItemMembers', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx });
+      } else {
+        vscode.postMessage({ command: 'toggleChecklistItemMember', cardId: window.cardId, checklistIndex: checklistIdx, itemIndex: itemIdx, email: email });
+      }
+      var menu = document.getElementById('checklist-item-member-menu-' + checklistIdx + '-' + itemIdx);
+      if (menu) menu.style.display = 'none';
+    };
+    // Close member menus when clicking outside
+    document.addEventListener('click', function(event) {
+      if (!event.target.classList.contains('checklist-item-member-btn')) {
+        document.querySelectorAll('.checklist-item-member-menu').forEach(function(m) {
+          m.style.display = 'none';
+        });
+      }
+    });
     window.editChecklistItemText = function(checklistIdx, itemIdx) {
       var textSpan = document.querySelectorAll('.checklist-item-text')[checklistIdx * 100 + itemIdx];
       var textInput = document.getElementById('checklist-item-edit-' + checklistIdx + '-' + itemIdx);

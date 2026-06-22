@@ -40,10 +40,17 @@ export interface CardAttachment {
   type: string;
 }
 
+export interface ChecklistItemMember {
+  email: string;
+  name: string;
+  icon_url?: string;
+}
+
 export interface ChecklistItem {
   text: string;
   completed?: boolean;
   checked?: boolean; // for backwards compatibility
+  assignedMembers?: ChecklistItemMember[];
 }
 
 export interface Checklist {
