@@ -112,6 +112,7 @@ export interface UpdateCardPayload {
   due_date?: string | null;
   start_date?: string | null;
   user_email?: string;
+  labels?: string[] | null;
 }
 
 export interface LinkCommitResponse {
@@ -219,6 +220,27 @@ export class BoardsClient {
 
   async getProjectCards(projectId: number): Promise<ProjectCardsResponse> {
     return this.request<ProjectCardsResponse>('GET', `/api/v1/projects/${projectId}/cards`);
+  }
+
+  async getProjectLabels(projectId: number): Promise<{ text: string; color: string }[]> {
+    try {
+      // Get labels from global_labels endpoint
+      const data = await this.request<{ text: string; color: string }[]>('GET', `/api/v1/global-labels?project_id=${projectId}`);
+      if (data && data.length > 0) {
+        return data;
+      }
+    } catch {
+      // Continue to fallback
+    }
+    // Fallback: get unique labels from all cards in the project
+    const projectData = await this.getProjectCards(projectId);
+    const labelMap = new Map<string, string>();
+    for (const card of projectData.cards) {
+      for (const label of card.labels) {
+        labelMap.set(label.text, label.color);
+      }
+    }
+    return Array.from(labelMap.entries()).map(([text, color]) => ({ text, color }));
   }
 
   async getCard(cardId: number): Promise<Card> {

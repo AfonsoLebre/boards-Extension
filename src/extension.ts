@@ -115,7 +115,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     vscode.commands.registerCommand('anturio.editCard', (item) => {
-      if (item?.data) editCardCommand(item.data as Card);
+      if (item?.data) editCardCommand(item.data as Card, item.projectId);
     }),
 
     vscode.commands.registerCommand('anturio.deleteCard', async (item) => {

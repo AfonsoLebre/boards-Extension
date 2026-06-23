@@ -30,11 +30,14 @@ function convertFromAPIDateFormat(dateStr: string | undefined): string {
   return `${match[3]}-${match[2]}-${match[1]}`; // DD-MM-YYYY
 }
 
-export async function editCardCommand(card: Card): Promise<void> {
+export async function editCardCommand(card: Card, projectId?: number): Promise<void> {
   if (!boardsClient.isConfigured()) {
     vscode.window.showErrorMessage('Anturio: API Key não configurada.');
     return;
   }
+
+  // Use projectId from parameter, fallback to card.project_id
+  const effectiveProjectId = projectId ?? card.project_id;
 
   const choices: { label: string; type: string; descIdx?: number }[] = [
     { label: 'Título', type: 'title' },
@@ -52,6 +55,7 @@ export async function editCardCommand(card: Card): Promise<void> {
   choices.push({ label: 'Prioridade', type: 'priority' });
   choices.push({ label: 'Data de início', type: 'start_date' });
   choices.push({ label: 'Data limite', type: 'due_date' });
+  choices.push({ label: 'Labels', type: 'labels' });
 
   const selected = await vscode.window.showQuickPick(choices, {
     placeHolder: `Editar "${card.title}" — escolhe o campo:`,
@@ -195,6 +199,97 @@ export async function editCardCommand(card: Card): Promise<void> {
         const userEmail = await boardsClient.getCurrentUserEmail();
         await boardsClient.updateCardRaw(card.id, { startDate: startDateValue, user_email: userEmail ?? undefined });
         vscode.window.showInformationMessage(startDateValue ? `Data de início alterada para "${newStartDate.trim()}"` : 'Data de início removida');
+        vscode.commands.executeCommand('anturio.refresh');
+      } catch (err) {
+        vscode.window.showErrorMessage(`Anturio: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+      }
+      break;
+    }
+
+    case 'labels': {
+      // Get current labels from the card
+      const currentLabels = card.labels || [];
+
+      // Get project labels dynamically
+      let projectLabels: { text: string; color: string }[] = [];
+      if (effectiveProjectId) {
+        try {
+          projectLabels = await boardsClient.getProjectLabels(effectiveProjectId);
+        } catch {
+          // Keep empty, will use fallback
+        }
+      }
+      // If no project labels or error, use current card labels
+      if (projectLabels.length === 0) {
+        const labelMap = new Map<string, string>();
+        currentLabels.forEach((l) => labelMap.set(l.text, l.color));
+        projectLabels = Array.from(labelMap.entries()).map(([text, color]) => ({ text, color }));
+      }
+      // If still empty, provide default set
+      if (projectLabels.length === 0) {
+        projectLabels = [
+          { text: 'Bug', color: '#e74c3c' },
+          { text: 'Feature', color: '#f1c40f' },
+          { text: 'Melhoria', color: '#3498db' },
+          { text: 'Documentation', color: '#2ecc71' },
+          { text: 'Urgente', color: '#9b59b6' },
+          { text: 'Revisão', color: '#e67e22' },
+          { text: 'blocked', color: '#34495e' },
+          { text: 'Teste', color: '#95a5a6' },
+        ];
+      }
+
+      // Create label options with emoji prefix based on color
+      const getEmoji = (color: string): string => {
+        const c = color.toLowerCase();
+        if (c.includes('red') || c === '#e74c3c') return '🔴';
+        if (c.includes('yellow') || c === '#f1c40f') return '🟡';
+        if (c.includes('blue') || c === '#3498db') return '🔵';
+        if (c.includes('green') || c === '#2ecc71') return '🟢';
+        if (c.includes('purple') || c === '#9b59b6') return '🟣';
+        if (c.includes('orange') || c === '#e67e22') return '🟠';
+        if (c.includes('gray') || c.includes('grey') || c === '#34495e' || c === '#95a5a6') return '⚫';
+        return '🏷️';
+      };
+
+      const labelOptions = projectLabels.map((l) => ({
+        label: `${getEmoji(l.color)} ${l.text}`,
+        picked: false,
+        text: l.text,
+        color: l.color,
+      }));
+
+      // Mark current labels as selected
+      const currentLabelTexts = currentLabels.map((l) => l.text);
+      labelOptions.forEach((opt) => {
+        opt.picked = currentLabelTexts.includes(opt.text);
+      });
+
+      const selectedLabels = await vscode.window.showQuickPick(labelOptions, {
+        placeHolder: 'Selecione as labels (selecione várias):',
+        canPickMany: true,
+        ignoreFocusOut: true,
+      });
+
+      if (!selectedLabels) return;
+      // Get list of selected label texts
+      const newLabelTexts = selectedLabels.map((s) => s.text);
+      // Check if labels changed
+      const labelsChanged = JSON.stringify(newLabelTexts.sort()) !== JSON.stringify(currentLabelTexts.sort());
+      if (!labelsChanged) return;
+
+      try {
+        const userEmail = await boardsClient.getCurrentUserEmail();
+        // Build label objects with text and color
+        const newLabels = newLabelTexts.map((text) => {
+          const opt = labelOptions.find((o) => o.text === text);
+          return { text, color: opt?.color || '#999' };
+        });
+        await boardsClient.updateCardRaw(card.id, { labels: newLabels as any, user_email: userEmail ?? undefined });
+        const msg = newLabelTexts.length > 0
+          ? `Labels alteradas: ${newLabelTexts.join(', ')}`
+          : 'Labels removidas';
+        vscode.window.showInformationMessage(msg);
         vscode.commands.executeCommand('anturio.refresh');
       } catch (err) {
         vscode.window.showErrorMessage(`Anturio: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
