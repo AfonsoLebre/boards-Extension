@@ -252,12 +252,15 @@ export class CardDetailPanel {
         console.error('[CardDetailPanel] Erro ao adicionar checklist:', err);
         vscode.window.showErrorMessage('Erro ao adicionar checklist: ' + (err instanceof Error ? err.message : String(err)));
       }
-    } else if (msg.command === 'addDescription' && msg.cardId && msg.title && msg.content) {
+    } else if (msg.command === 'addDescription' && msg.cardId && msg.title) {
       try {
         console.log('[CardDetailPanel] Adding description:', msg.cardId, 'title:', msg.title);
         const fullCard = await boardsClient.getCardDetails(msg.cardId);
         const descriptions = fullCard.descriptions || [];
-        descriptions.push({ title: msg.title, content: msg.content });
+        // Don't save placeholder text - treat as empty
+        const placeholderText = 'Duplo clique para editar...';
+        const content = msg.content && msg.content !== placeholderText ? msg.content : '';
+        descriptions.push({ title: msg.title, content: content });
         await boardsClient.updateCardRaw(msg.cardId, {
           descriptions,
           user_email: this.currentUser?.email,
@@ -601,7 +604,7 @@ export class CardDetailPanel {
               ${showDeleteBtn ? `<button class="description-delete-btn" onclick="event.stopPropagation(); window.deleteDescription(${idx})" title="Eliminar descrição">🗑</button>` : ''}
             </h3>
             <div class="description-content" id="${safeId}">
-              <div class="description-text" ondblclick="window.editDescriptionContent(${idx})">${this.renderDescriptionWithImages(d.content)}</div>
+              <div class="description-text" ondblclick="window.editDescriptionContent(${idx})">${d.content && d.content !== 'Duplo clique para editar...' ? this.renderDescriptionWithImages(d.content) : '<em class="description-placeholder">Duplo clique para editar...</em>'}</div>
               <textarea class="description-textarea" id="description-edit-${idx}" style="display:none">${this.escape(d.content)}</textarea>
               <div class="description-edit-hint" style="display:none">Enter para guardar | Esc para cancelar</div>
             </div>
@@ -900,6 +903,8 @@ export class CardDetailPanel {
     .description-content { margin-top: 8px; }
     .description-text { cursor: pointer; white-space: pre-wrap; word-break: break-word; }
     .description-text:hover { background: var(--vscode-editor-background); }
+    .description-placeholder { color: var(--vscode-disabledForeground); font-style: italic; }
+    .placeholder-text { color: var(--vscode-disabledForeground); font-style: italic; }
     .description-textarea { width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 100px; }
     .description-edit-hint { font-size: 0.8em; color: var(--vscode-descriptionForeground); margin-top: 4px; }
     .add-description-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--vscode-panel-border); }
@@ -1459,7 +1464,7 @@ export class CardDetailPanel {
     // Descriptions
     window.addDescription = function() {
       // Cria uma nova descrição com título "Nova Descrição" e conteúdo padrão
-      vscode.postMessage({ command: 'addDescription', cardId: window.cardId, title: 'Nova Descrição', content: 'Adicione uma descrição detalhada...' });
+      vscode.postMessage({ command: 'addDescription', cardId: window.cardId, title: 'Nova Descrição', content: 'Duplo clique para editar...' });
     };
     window.editDescriptionTitle = function(idx) {
       var titleSpan = document.querySelectorAll('.description-title-text')[idx];
@@ -1554,7 +1559,9 @@ export class CardDetailPanel {
       var hint = contentArea ? contentArea.nextElementSibling : null;
       if (contentDiv && contentArea) {
         var newContent = contentArea.value.trim();
-        if (newContent) {
+        // Don't save placeholder text - treat as empty
+        var placeholderText = 'Duplo clique para editar...';
+        if (newContent && newContent !== placeholderText) {
           var titleSpan = document.querySelectorAll('.description-title-text')[idx];
           vscode.postMessage({ command: 'updateDescription', cardId: window.cardId, index: idx, title: titleSpan.textContent, content: newContent });
         }

@@ -69,7 +69,10 @@
       "Bash(curl -s -X POST http://localhost:3000/api/v1/projects/50/cards -H \"Content-Type: application/json\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\" -d '{\"\"title\"\":\"\"cartest\"\",\"\"priority\"\":\"\"normal\"\"}')",
       "Bash(wmic process where \"name=''node.exe''\" get processid,commandline)",
       "Bash(curl -s -X POST http://localhost:3000/api/v1/projects/50/cards -H \"Content-Type: application/json\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\" -d '{\"\"title\"\":\"\"abc123\"\",\"\"priority\"\":\"\"normal\"\"}')",
-      "Bash(taskkill //F //PID 25592)"
+      "Bash(taskkill //F //PID 25592)",
+      "Bash(findstr \":3000\")",
+      "Bash(taskkill /PID 24616 /F)",
+      "Bash(taskkill //PID 24616 //F)"
     ]
   }
 }
