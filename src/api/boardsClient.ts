@@ -95,6 +95,7 @@ export interface ProjectParticipant {
 
 export interface CreateCardPayload {
   title: string;
+  description?: string;
   descriptions?: { id?: number; title: string; content: string }[];
   columnId?: string;
   priority?: Card['priority'];
@@ -108,7 +109,9 @@ export interface UpdateCardPayload {
   description?: string;
   columnId?: string;
   priority?: Card['priority'];
-  due_date?: string;
+  due_date?: string | null;
+  start_date?: string | null;
+  user_email?: string;
 }
 
 export interface LinkCommitResponse {
@@ -144,6 +147,8 @@ export class BoardsApiError extends Error {
 }
 
 export class BoardsClient {
+  private _currentUser: CurrentUser | null = null;
+
   private get config() {
     return vscode.workspace.getConfiguration('anturio');
   }
@@ -162,6 +167,17 @@ export class BoardsClient {
 
   isConfigured(): boolean {
     return this.serverUrl.length > 0 && this.apiKey.length > 0;
+  }
+
+  async getCurrentUserEmail(): Promise<string | null> {
+    if (!this._currentUser) {
+      try {
+        this._currentUser = await this.getCurrentUser();
+      } catch {
+        return null;
+      }
+    }
+    return this._currentUser?.email ?? null;
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
