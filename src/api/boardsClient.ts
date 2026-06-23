@@ -95,7 +95,7 @@ export interface ProjectParticipant {
 
 export interface CreateCardPayload {
   title: string;
-  descriptions?: { id: number; title: string; content: string }[];
+  descriptions?: { id?: number; title: string; content: string }[];
   columnId?: string;
   priority?: Card['priority'];
   labels?: string[];

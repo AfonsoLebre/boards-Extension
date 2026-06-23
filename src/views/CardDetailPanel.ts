@@ -578,7 +578,7 @@ export class CardDetailPanel {
         // Se não há descrições, mostrar secção vazia com botão para adicionar
         return `
           <section>
-            <h3><span class="section-toggle" onclick="window.toggleSection('descriptions-section')">▾</span> Descrições</h3>
+            <h3><span class="section-toggle" onclick="window.toggleSection('descriptions-section')">▾</span> Descrições (${descriptions.length})</h3>
             <div class="descriptions-all" id="descriptions-section">
               <button class="description-add-button" onclick="window.addDescription()">+ Adicionar Descrição</button>
             </div>
@@ -619,7 +619,7 @@ export class CardDetailPanel {
 
       return `
         <section>
-          <h3><span class="section-toggle" onclick="window.toggleSection('descriptions-section')">▾</span> Descrições</h3>
+          <h3><span class="section-toggle" onclick="window.toggleSection('descriptions-section')">▾</span> Descrições (${descriptions.length})</h3>
           <div class="descriptions-all" id="descriptions-section">
             ${descriptionsHtml}
             ${addDescriptionHtml}
@@ -737,11 +737,11 @@ export class CardDetailPanel {
 
       return `
         <section>
-          <h3><span class="section-toggle" onclick="window.toggleSection('checklists-list')">${checklists.length > 0 ? '▾' : '▸'}</span> Checklists (<span id="checklists-count">${checklists.length}</span>)</h3>
+          <h3><span class="section-toggle" onclick="window.toggleSection('checklists-list')">▾</span> Checklists (<span id="checklists-count">${checklists.length}</span>)</h3>
           <div class="checklists-list" id="checklists-list">
             ${listHtml}
             <div class="checklist-add-section">
-              <input type="text" id="checklist-title-input" class="checklist-title-input" placeholder="Título do nova checklist..." onkeypress="if(event.key==='Enter')window.addChecklist()">
+              <input type="text" id="checklist-title-input" class="checklist-title-input" placeholder="Título da nova checklist..." onkeypress="if(event.key==='Enter')window.addChecklist()">
               <button id="add-checklist-btn" class="checklist-button" onclick="window.addChecklist()">+ Criar Checklist</button>
             </div>
           </div>
