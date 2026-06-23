@@ -11,7 +11,6 @@ export async function deleteCardCommand(card: Card): Promise<boolean> {
     `Apagar card "${card.title}"?`,
     { modal: true },
     'Apagar',
-    'Cancelar',
   );
 
   if (confirmed !== 'Apagar') return false;

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { boardsClient, Card } from '../api/boardsClient';
+import { boardsClient, Card, CardDescription } from '../api/boardsClient';
 
 export async function editCardCommand(card: Card): Promise<void> {
   if (!boardsClient.isConfigured()) {
@@ -7,12 +7,21 @@ export async function editCardCommand(card: Card): Promise<void> {
     return;
   }
 
-  const choices = [
+  const choices: { label: string; type: string; descIdx?: number }[] = [
     { label: 'Título', type: 'title' },
-    { label: 'Descrição', type: 'description' },
-    { label: 'Prioridade', type: 'priority' },
-    { label: 'Data limite', type: 'due_date' },
   ];
+
+  // Add descriptions as separate options
+  if (card.descriptions && card.descriptions.length > 0) {
+    card.descriptions.forEach((d, idx) => {
+      choices.push({ label: `Descrição: ${d.title}`, type: 'description', descIdx: idx });
+    });
+  } else if (card.description) {
+    // Legacy singular description
+    choices.push({ label: 'Descrição', type: 'description' });
+  }
+  choices.push({ label: 'Prioridade', type: 'priority' });
+  choices.push({ label: 'Data limite', type: 'due_date' });
 
   const selected = await vscode.window.showQuickPick(choices, {
     placeHolder: `Editar "${card.title}" — escolhe o campo:`,
@@ -40,18 +49,45 @@ export async function editCardCommand(card: Card): Promise<void> {
     }
 
     case 'description': {
-      const newDesc = await vscode.window.showInputBox({
-        prompt: 'Nova descrição do card',
-        value: card.description ?? '',
-        ignoreFocusOut: true,
-      });
-      if (newDesc === undefined || newDesc === card.description) return;
-      try {
-        await boardsClient.updateCard(card.id, { description: newDesc });
-        vscode.window.showInformationMessage('Descrição alterada.');
-        vscode.commands.executeCommand('anturio.refresh');
-      } catch (err) {
-        vscode.window.showErrorMessage(`Anturio: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+      // Check if this is a specific description from the array
+      const descIdx = (selected as any).descIdx;
+      if (descIdx !== undefined && card.descriptions && card.descriptions[descIdx]) {
+        // Editing a specific description from the array
+        const currentDesc = card.descriptions[descIdx];
+        const newDesc = await vscode.window.showInputBox({
+          prompt: `Nova descrição "${currentDesc.title}"`,
+          value: currentDesc.content ?? '',
+          ignoreFocusOut: true,
+        });
+        if (newDesc === undefined || newDesc === currentDesc.content) return;
+        try {
+          // Get full card to update descriptions array
+          const fullCard = await boardsClient.getCardDetails(card.id);
+          const descriptions = fullCard.descriptions || [];
+          if (descriptions[descIdx]) {
+            descriptions[descIdx].content = newDesc;
+            await boardsClient.updateCardRaw(card.id, { descriptions });
+            vscode.window.showInformationMessage(`Descrição "${currentDesc.title}" alterada.`);
+            vscode.commands.executeCommand('anturio.refresh');
+          }
+        } catch (err) {
+          vscode.window.showErrorMessage(`Anturio: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+        }
+      } else {
+        // Legacy singular description
+        const newDesc = await vscode.window.showInputBox({
+          prompt: 'Nova descrição do card',
+          value: card.description ?? '',
+          ignoreFocusOut: true,
+        });
+        if (newDesc === undefined || newDesc === card.description) return;
+        try {
+          await boardsClient.updateCard(card.id, { description: newDesc });
+          vscode.window.showInformationMessage('Descrição alterada.');
+          vscode.commands.executeCommand('anturio.refresh');
+        } catch (err) {
+          vscode.window.showErrorMessage(`Anturio: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+        }
       }
       break;
     }
