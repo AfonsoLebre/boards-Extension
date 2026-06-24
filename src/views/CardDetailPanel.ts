@@ -874,10 +874,23 @@ export class CardDetailPanel {
   <title>${this.escape(card.title)}</title>
   <style>
     * { text-align: left; }
-    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 24px; line-height: 1.6; max-width: 600px; margin: 0; }
+    body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 24px; line-height: 1.6; max-width: 100%; margin: 0; }
+    .main-container { display: flex; gap: 0; width: 100%; }
+    .left-column { flex: 1; min-width: 200px; overflow-y: auto; max-height: 100vh; padding: 0 24px 24px 0; }
+    .resize-handle { width: 6px; background: var(--vscode-panel-border); cursor: col-resize; flex-shrink: 0; }
+    .resize-handle:hover { background: var(--vscode-focusBorder); }
+    .right-column { width: 350px; min-width: 0; overflow-y: auto; max-height: 100vh; padding: 0 0 24px 24px; box-sizing: border-box; }
+    .right-column-switch { display: flex; gap: 8px; margin-bottom: 16px; }
+    .switch-btn { flex: 1; padding: 8px 12px; font-size: 0.85em; border: 1px solid var(--vscode-focusBorder); background: var(--vscode-editor-background); color: var(--vscode-foreground); cursor: pointer; border-radius: 4px; }
+    .switch-btn.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
+    .switch-btn:hover:not(.active) { background: var(--vscode-button-hoverBackground); }
+    .right-panel-content { display: none; }
+    .right-panel-content.active { display: block; }
+    @media (max-width: 900px) { .main-container { flex-direction: column; } .resize-handle { display: none; } .right-column { width: 100%; max-width: 100%; border-left: none; border-top: 1px solid var(--vscode-panel-border); padding-left: 0; padding-top: 24px; } }
     h1 { font-size: 1.3em; margin-bottom: 6px; margin-left: 0; padding-left: 0; }
     h3 { font-size: 0.9em; text-transform: uppercase; letter-spacing: .05em; color: var(--vscode-descriptionForeground); margin: 0 0 8px; }
     section { margin-top: 20px; border-top: 1px solid var(--vscode-panel-border); padding-top: 16px; }
+    .right-column section:first-of-type { margin-top: 0; border-top: none; padding-top: 0; }
     .label { border-radius: 4px; padding: 2px 8px; font-size: 0.8em; margin-right: 6px; color: #fff; }
     .labels { margin: 10px 0; }
     .meta { color: var(--vscode-descriptionForeground); font-size: 0.85em; }
@@ -951,7 +964,7 @@ export class CardDetailPanel {
     .comment.is-own-comment { margin-left: auto; margin-right: 0; }
     .comment.is-own-comment .comment-header { flex-direction: row-reverse; }
     .add-comment { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--vscode-panel-border); }
-    .add-comment textarea { width: 100%; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: vertical; min-height: 60px; }
+    .add-comment textarea { width: 100%; max-width: 100%; box-sizing: border-box; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); border: 1px solid var(--vscode-focusBorder); border-radius: 4px; padding: 8px; font-family: var(--vscode-font-family); font-size: 0.9em; resize: both; min-height: 60px; }
     .add-comment textarea:focus { outline: none; border-color: var(--vscode-focusBorder); }
     .add-comment button { margin-top: 8px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 4px; padding: 6px 12px; font-size: 0.85em; cursor: pointer; }
     .add-comment button:hover { background: var(--vscode-button-hoverBackground); }
@@ -1059,6 +1072,8 @@ export class CardDetailPanel {
   </style>
 </head>
 <body>
+  <div class="main-container" id="main-container">
+  <div class="left-column" id="left-column">
   <h1 class="card-title" id="card-title" ondblclick="window.startEditTitle()">${this.escape(card.title)}</h1>
   <input type="text" id="title-input" class="card-title-input" style="display:none;" value="${this.escape(card.title)}">
   <span class="save-hint">Enter para guardar | Esc para cancelar</span>
@@ -1084,9 +1099,38 @@ export class CardDetailPanel {
   ${checklistsHtml}
   ${descriptionHtml}
   ${attachmentsHtml}
-  ${commentsHtml}
-  ${historyHtml}
+  </div>
+  <div class="resize-handle" id="resize-handle"></div>
+  <div class="right-column" id="right-column">
+  <div class="right-column-switch">
+    <button class="switch-btn active" id="switch-comments-btn" onclick="window.showRightPanel('comments')">Comentários</button>
+    <button class="switch-btn" id="switch-history-btn" onclick="window.showRightPanel('history')">Histórico</button>
+  </div>
+  <div id="right-panel-comments" class="right-panel-content active">${commentsHtml}</div>
+  <div id="right-panel-history" class="right-panel-content" style="display:none;">${historyHtml}</div>
+  </div>
+  </div>
   <script>
+    window.showImage = function(dataUrl) {
+      var modal = document.getElementById('image-modal');
+    };
+    window.showRightPanel = function(panel) {
+      var commentsBtn = document.getElementById('switch-comments-btn');
+      var historyBtn = document.getElementById('switch-history-btn');
+      var commentsPanel = document.getElementById('right-panel-comments');
+      var historyPanel = document.getElementById('right-panel-history');
+      if (panel === 'comments') {
+        commentsBtn.classList.add('active');
+        historyBtn.classList.remove('active');
+        commentsPanel.style.display = 'block';
+        historyPanel.style.display = 'none';
+      } else {
+        commentsBtn.classList.remove('active');
+        historyBtn.classList.add('active');
+        commentsPanel.style.display = 'none';
+        historyPanel.style.display = 'block';
+      }
+    };
     window.showImage = function(dataUrl) {
       var modal = document.getElementById('image-modal');
       var modalImg = document.getElementById('modal-img');
@@ -1095,6 +1139,42 @@ export class CardDetailPanel {
         modal.classList.add('active');
       }
     };
+    // Redimensionar colunas
+    (function() {
+      var resizeHandle = document.getElementById('resize-handle');
+      var rightColumn = document.getElementById('right-column');
+      var mainContainer = document.getElementById('main-container');
+      if (!resizeHandle || !rightColumn) return;
+      // Configurar largura inicial das textareas
+      document.querySelectorAll('.add-comment textarea, .reply-box textarea').forEach(function(ta) {
+        ta.style.maxWidth = (rightColumn.offsetWidth - 48) + 'px';
+      });
+      var isResizing = false;
+      var startX, startWidth;
+      resizeHandle.addEventListener('mousedown', function(e) {
+        isResizing = true;
+        startX = e.clientX;
+        startWidth = rightColumn.offsetWidth;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      });
+      document.addEventListener('mousemove', function(e) {
+        if (!isResizing) return;
+        var diff = startX - e.clientX;
+        var newWidth = startWidth + diff;
+        rightColumn.style.width = newWidth + 'px';
+        rightColumn.style.flex = 'none';
+        // Ajustar larguras das textareas
+        document.querySelectorAll('.add-comment textarea, .reply-box textarea').forEach(function(ta) {
+          ta.style.maxWidth = (newWidth - 48) + 'px';
+        });
+      });
+      document.addEventListener('mouseup', function() {
+        isResizing = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      });
+    })();
     window.closeModal = function() {
       var modal = document.getElementById('image-modal');
       if (modal) modal.classList.remove('active');
