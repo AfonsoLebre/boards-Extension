@@ -277,7 +277,7 @@ export class CardDetailPanel {
         const fullCard = await boardsClient.getCardDetails(msg.cardId);
         const descriptions = fullCard.descriptions || [];
         if (!descriptions[msg.index]) throw new Error('Descrição não encontrada');
-        descriptions[msg.index] = { ...descriptions[msg.index], title: msg.title, content: msg.content || descriptions[msg.index].content };
+        descriptions[msg.index] = { ...descriptions[msg.index], title: msg.title, content: msg.content };
         await boardsClient.updateCardRaw(msg.cardId, {
           descriptions,
           user_email: this.currentUser?.email,
@@ -604,8 +604,8 @@ export class CardDetailPanel {
               ${showDeleteBtn ? `<button class="description-delete-btn" onclick="event.stopPropagation(); window.deleteDescription(${idx})" title="Eliminar descrição">🗑</button>` : ''}
             </h3>
             <div class="description-content" id="${safeId}">
-              <div class="description-text" ondblclick="window.editDescriptionContent(${idx})">${d.content && d.content !== 'Duplo clique para editar...' ? this.renderDescriptionWithImages(d.content) : '<em class="description-placeholder">Duplo clique para editar...</em>'}</div>
-              <textarea class="description-textarea" id="description-edit-${idx}" style="display:none">${this.escape(d.content)}</textarea>
+              <div class="description-text" ondblclick="window.editDescriptionContent(${idx})" data-content-empty="${!d.content || !d.content.replace(/^\s+$/g, '')}">${d.content && d.content.replace(/^\s+|$/g, '') ? this.renderDescriptionWithImages(d.content) : '<em class="description-placeholder">Duplo clique para editar...</em>'}</div>
+              <textarea class="description-textarea" id="description-edit-${idx}" style="display:none">${d.content && d.content.replace(/^\s+$/g, '') ? this.escape(d.content) : ''}</textarea>
               <div class="description-edit-hint" style="display:none">Enter para guardar | Esc para cancelar</div>
             </div>
           </section>
@@ -1131,6 +1131,17 @@ export class CardDetailPanel {
     // DEFINIR cardId PRIMEIRO - necessário para os cliques nos botões
     window.cardId = ${card.id};
 
+    // Fix: garantir que descrições vazias mostram o placeholder
+    (function() {
+      var descTexts = document.querySelectorAll('.description-text');
+      descTexts.forEach(function(el) {
+        var content = el.textContent || '';
+        if (!content || !content.replace(/^\s+|\s+$/g, '')) {
+          el.innerHTML = '<em class="description-placeholder">Duplo clique para editar...</em>';
+        }
+      });
+    })();
+
     // Handler do botão adicionar comentário
     var commentBtn = document.getElementById('add-comment-btn');
     if (commentBtn) {
@@ -1531,8 +1542,16 @@ export class CardDetailPanel {
       var contentArea = document.getElementById('description-edit-' + idx);
       var hint = contentArea ? contentArea.nextElementSibling : null;
       if (contentDiv && contentArea) {
-        contentArea.setAttribute('data-original', contentDiv.textContent);
-        contentArea.value = contentDiv.textContent;
+        var placeholderText = 'Duplo clique para editar...';
+        var content = contentDiv.textContent;
+        // If showing placeholder, start with empty textarea
+        if (content === placeholderText) {
+          contentArea.setAttribute('data-original', '');
+          contentArea.value = '';
+        } else {
+          contentArea.setAttribute('data-original', content);
+          contentArea.value = content;
+        }
         contentDiv.style.display = 'none';
         contentArea.style.display = 'block';
         contentArea.focus();
@@ -1558,13 +1577,16 @@ export class CardDetailPanel {
       var contentArea = document.getElementById('description-edit-' + idx);
       var hint = contentArea ? contentArea.nextElementSibling : null;
       if (contentDiv && contentArea) {
-        var newContent = contentArea.value.trim();
+        var newContent = contentArea.value;
+        var titleSpan = document.querySelectorAll('.description-title-text')[idx];
         // Don't save placeholder text - treat as empty
         var placeholderText = 'Duplo clique para editar...';
-        if (newContent && newContent !== placeholderText) {
-          var titleSpan = document.querySelectorAll('.description-title-text')[idx];
-          vscode.postMessage({ command: 'updateDescription', cardId: window.cardId, index: idx, title: titleSpan.textContent, content: newContent });
+        if (newContent === placeholderText) {
+          newContent = '';
         }
+        // Save to database (even if empty - this clears the description)
+        vscode.postMessage({ command: 'updateDescription', cardId: window.cardId, index: idx, title: titleSpan.textContent, content: newContent });
+        // Update UI to show placeholder if empty, or content if there's text
         contentArea.style.display = 'none';
         contentDiv.style.display = '';
         if (hint) hint.style.display = 'none';
