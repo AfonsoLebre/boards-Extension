@@ -166,9 +166,10 @@ export async function editCardCommand(card: Card, projectId?: number): Promise<v
       const inputChanged = newDueDate.trim() !== convertFromAPIDateFormat(card.due_date);
       if (!inputChanged) return;
       try {
-        // Get user email for activity log, use PUT for logging
+        // Get user email and name for activity log
         const userEmail = await boardsClient.getCurrentUserEmail();
-        await boardsClient.updateCardRaw(card.id, { dueDate: dueDateValue, user_email: userEmail ?? undefined });
+        const userName = await boardsClient.getCurrentUserName();
+        await boardsClient.updateCardRaw(card.id, { dueDate: dueDateValue, user_email: userEmail ?? undefined, user_name: userName ?? undefined });
         vscode.window.showInformationMessage(dueDateValue ? `Data limite alterada para "${newDueDate.trim()}"` : 'Data limite removida');
         vscode.commands.executeCommand('anturio.refresh');
       } catch (err) {
@@ -195,9 +196,10 @@ export async function editCardCommand(card: Card, projectId?: number): Promise<v
       const inputChanged = newStartDate.trim() !== convertFromAPIDateFormat(card.start_date);
       if (!inputChanged) return;
       try {
-        // Get user email for activity log, use startDate (camelCase) as the API expects
+        // Get user email and name for activity log
         const userEmail = await boardsClient.getCurrentUserEmail();
-        await boardsClient.updateCardRaw(card.id, { startDate: startDateValue, user_email: userEmail ?? undefined });
+        const userName = await boardsClient.getCurrentUserName();
+        await boardsClient.updateCardRaw(card.id, { startDate: startDateValue, user_email: userEmail ?? undefined, user_name: userName ?? undefined });
         vscode.window.showInformationMessage(startDateValue ? `Data de início alterada para "${newStartDate.trim()}"` : 'Data de início removida');
         vscode.commands.executeCommand('anturio.refresh');
       } catch (err) {
@@ -280,12 +282,13 @@ export async function editCardCommand(card: Card, projectId?: number): Promise<v
 
       try {
         const userEmail = await boardsClient.getCurrentUserEmail();
+        const userName = await boardsClient.getCurrentUserName();
         // Build label objects with text and color
         const newLabels = newLabelTexts.map((text) => {
           const opt = labelOptions.find((o) => o.text === text);
           return { text, color: opt?.color || '#999' };
         });
-        await boardsClient.updateCardRaw(card.id, { labels: newLabels as any, user_email: userEmail ?? undefined });
+        await boardsClient.updateCardRaw(card.id, { labels: newLabels as any, user_email: userEmail ?? undefined, user_name: userName ?? undefined });
         const msg = newLabelTexts.length > 0
           ? `Labels alteradas: ${newLabelTexts.join(', ')}`
           : 'Labels removidas';

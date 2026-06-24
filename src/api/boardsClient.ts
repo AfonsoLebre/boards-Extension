@@ -181,6 +181,17 @@ export class BoardsClient {
     return this._currentUser?.email ?? null;
   }
 
+  async getCurrentUserName(): Promise<string | null> {
+    if (!this._currentUser) {
+      try {
+        this._currentUser = await this.getCurrentUser();
+      } catch {
+        return null;
+      }
+    }
+    return this._currentUser?.name ?? null;
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     if (!this.isConfigured()) {
       throw new BoardsApiError(401, 'API Key não configurada. Abre as definições do Anturio.');
