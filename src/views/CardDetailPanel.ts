@@ -1003,11 +1003,11 @@ export class CardDetailPanel {
     .dropzone-text { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
     /* Checklists */
     .checklist-section { background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
-    .checklist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .checklist-title { font-weight: bold; cursor: text; }
+    .checklist-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .checklist-title { font-weight: bold; cursor: text; flex: 1; text-align: left; }
     .checklist-title:hover { background: var(--vscode-editorHighlightBackground); border-radius: 3px; }
     .checklist-title-input { flex: 1; padding: 2px 6px; border: 1px solid var(--vscode-focusBorder); border-radius: 3px; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-weight: bold; font-size: inherit; }
-    .checklist-progress { font-size: 0.85em; color: var(--vscode-descriptionForeground); }
+    .checklist-progress { font-size: 0.85em; color: var(--vscode-descriptionForeground); margin-left: auto; }
     .checklist-delete-btn { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; }
     .checklist-delete-btn:hover { opacity: 1; }
     .checklist-items { margin-bottom: 8px; }
