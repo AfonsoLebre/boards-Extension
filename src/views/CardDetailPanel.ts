@@ -14,14 +14,17 @@ const PRIORITY_LABELS: Record<string, string> = {
 };
 
 export class CardDetailPanel {
-  private static panels = new Map<number, CardDetailPanel>();
+  private static panels = new Map<string, CardDetailPanel>();
+  private static sidebarCards = new Map<string, Card[]>(); // Store all cards opened in sidebar
   private readonly panel: vscode.WebviewPanel;
+  private readonly panelKey: string;
   private card!: Card;
   private currentUser: CurrentUser | null = null;
   private projectParticipants: ProjectParticipant[] = [];
 
   private constructor(card: Card) {
     this.card = card; // Inicializar logo para fallback
+    this.panelKey = String(card.id);
     this.panel = vscode.window.createWebviewPanel(
       'anturio.cardDetail',
       card.title,
@@ -30,7 +33,7 @@ export class CardDetailPanel {
     );
     // Carregar detalhes completos do cartão para ter membros com fotos (com fallback)
     this.loadCardDetails(card.id, card);
-    this.panel.onDidDispose(() => CardDetailPanel.panels.delete(card.id));
+    this.panel.onDidDispose(() => CardDetailPanel.panels.delete(this.panelKey));
     this.panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
   }
 
@@ -60,7 +63,8 @@ export class CardDetailPanel {
       }
 
       const activities = await boardsClient.getComments(cardId);
-      this.panel.webview.html = this.buildHtml(fullCard, activities, this.projectParticipants);
+      const allCards = CardDetailPanel.sidebarCards.get('sidebar') || [];
+      this.panel.webview.html = this.buildHtml(fullCard, activities, this.projectParticipants, allCards);
     } catch (err) {
       console.error('[CardDetailPanel] Erro ao carregar detalhes, a usar fallback:', err);
       // Fallback para o cartão original se falhar
@@ -86,9 +90,20 @@ export class CardDetailPanel {
     }
   }
 
-  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number; email?: string; checklistIndex?: number; itemIndex?: number; text?: string; checked?: boolean }): Promise<void> {
+  private async handleMessage(msg: { command: string; cardId?: number; title?: string; content?: string; index?: number; files?: any[]; commentId?: number; parentId?: number; email?: string; checklistIndex?: number; itemIndex?: number; text?: string; checked?: boolean; cardIds?: number[] }): Promise<void> {
     console.log('[handleMessage] command:', msg.command);
-    if (msg.command === 'refreshComments' && this.card?.id) {
+    if (msg.command === 'switchCard' && msg.cardId) {
+      const sidebarKey = 'sidebar';
+      const cards = CardDetailPanel.sidebarCards.get(sidebarKey);
+      if (cards) {
+        const card = cards.find(c => c.id === msg.cardId);
+        if (card) {
+          this.card = card;
+          this.panelKey = String(card.id);
+          await this.loadCardDetails(card.id, card);
+        }
+      }
+    } else if (msg.command === 'refreshComments' && this.card?.id) {
       console.log('[handleMessage] refreshing comments for card:', this.card.id);
       await this.loadComments(this.card.id);
     } else if (msg.command === 'updateCardTitle' && msg.cardId && msg.title) {
@@ -277,7 +292,7 @@ export class CardDetailPanel {
         const fullCard = await boardsClient.getCardDetails(msg.cardId);
         const descriptions = fullCard.descriptions || [];
         if (!descriptions[msg.index]) throw new Error('Descrição não encontrada');
-        descriptions[msg.index] = { ...descriptions[msg.index], title: msg.title, content: msg.content };
+        descriptions[msg.index] = { ...descriptions[msg.index], title: msg.title ?? descriptions[msg.index].title, content: msg.content ?? descriptions[msg.index].content };
         await boardsClient.updateCardRaw(msg.cardId, {
           descriptions,
           user_email: this.currentUser?.email,
@@ -481,18 +496,130 @@ export class CardDetailPanel {
   }
 
   static show(card: Card): void {
+    const key = String(card.id);
     // Se já existe, revela o painel existente
-    if (CardDetailPanel.panels.has(card.id)) {
-      CardDetailPanel.panels.get(card.id)!.panel.reveal();
-      return;
+    if (CardDetailPanel.panels.has(key)) {
+      const existingPanel = CardDetailPanel.panels.get(key);
+      if (existingPanel) {
+        try {
+          existingPanel.panel.reveal();
+          return;
+        } catch {
+          CardDetailPanel.panels.delete(key);
+        }
+      }
     }
-    CardDetailPanel.panels.set(card.id, new CardDetailPanel(card));
+    CardDetailPanel.panels.set(key, new CardDetailPanel(card));
+  }
+
+  static hasSidebar(): boolean {
+    return CardDetailPanel.panels.has('sidebar');
+  }
+
+  static getSidebarCards(): Card[] {
+    return CardDetailPanel.sidebarCards.get('sidebar') || [];
+  }
+
+  static switchToCard(cardId: number): void {
+    const sidebarKey = 'sidebar';
+    const cards = CardDetailPanel.sidebarCards.get(sidebarKey);
+    if (!cards) return;
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+    const existingPanel = CardDetailPanel.panels.get(sidebarKey);
+    if (existingPanel) {
+      (existingPanel as any).card = card;
+      (existingPanel as any).panelKey = String(cardId);
+      (existingPanel as any).loadCardDetails(card.id, card);
+      CardDetailPanel.panels.set(String(cardId), existingPanel);
+    }
+  }
+
+  static showInTwo(card: Card): void {
+    const sidebarKey = 'sidebar';
+    const key = String(card.id);
+    // Check if this specific card is already open in sidebar
+    if (CardDetailPanel.panels.has(key)) {
+      const existingPanel = CardDetailPanel.panels.get(key);
+      if (existingPanel) {
+        try {
+          console.log('[Sidebar] Found existing panel for card', key, '- reloading');
+          // Update card data and reload
+          (existingPanel as any).card = card;
+          (existingPanel as any).loadCardDetails(card.id, card);
+          (existingPanel as any).panel.reveal();
+          return;
+        } catch {
+          CardDetailPanel.panels.delete(key);
+        }
+      }
+    }
+    // If sidebar already exists
+    if (CardDetailPanel.panels.has(sidebarKey)) {
+      const existingPanel = CardDetailPanel.panels.get(sidebarKey);
+      if (existingPanel) {
+        const currentCard = (existingPanel as any).card;
+        // Convert both to numbers for comparison (avoid type issues)
+        const currentId = Number(currentCard?.id);
+        const newId = Number(card.id);
+        // If this card is already showing, just reveal it
+        if (currentId === newId) {
+          (existingPanel as any).panel.reveal();
+          return;
+        }
+        console.log('[Sidebar] Switching from', currentId, 'to', newId);
+        // Save previous card before switching
+        if (currentCard) {
+          if (!CardDetailPanel.sidebarCards.has(sidebarKey)) {
+            CardDetailPanel.sidebarCards.set(sidebarKey, []);
+          }
+          const cardsList = CardDetailPanel.sidebarCards.get(sidebarKey)!;
+          if (!cardsList.find(c => Number(c.id) === currentId)) {
+            cardsList.push(currentCard);
+          }
+        }
+        // Switch to new card - always fetch fresh from server
+        (existingPanel as any).card = card;
+        (existingPanel as any).panelKey = key;
+        (existingPanel as any).panel.title = card.title;
+        (existingPanel as any).loadCardDetails(card.id, card);
+        (existingPanel as any).panel.reveal();
+        CardDetailPanel.panels.set(key, existingPanel);
+        return;
+      }
+    }
+    // First time: create panel in ViewColumn.Two (with split to right)
+    const panel = vscode.window.createWebviewPanel(
+      'anturio.cardDetailSidebar',
+      card.title,
+      vscode.ViewColumn.Two,
+      { enableScripts: true, retainContextWhenHidden: true },
+    );
+    // Initialize sidebarCards with first card
+    CardDetailPanel.sidebarCards.set(sidebarKey, [card]);
+    // Create a simple wrapper object to handle messages
+    const panelInstance = Object.create(CardDetailPanel.prototype);
+    (panelInstance as any).panel = panel;
+    (panelInstance as any).panelKey = key;
+    (panelInstance as any).card = card;
+    (panelInstance as any).currentUser = null;
+    (panelInstance as any).projectParticipants = [];
+    panel.title = card.title;
+    panel.onDidDispose(() => {
+      CardDetailPanel.panels.delete(key);
+      CardDetailPanel.panels.delete(sidebarKey);
+    });
+    panel.webview.onDidReceiveMessage((msg: any) => panelInstance.handleMessage(msg));
+    (panelInstance as any).loadCardDetails(card.id, card);
+    CardDetailPanel.panels.set(key, panelInstance);
+    CardDetailPanel.panels.set(sidebarKey, panelInstance);
   }
 
   private async loadComments(cardId: number): Promise<void> {
     try {
       const activities = await boardsClient.getComments(cardId);
-      this.panel.webview.html = this.buildHtml(this.card, activities, this.projectParticipants);
+      const allCards = CardDetailPanel.sidebarCards.get('sidebar') || [];
+      this.panel.webview.html = this.buildHtml(this.card, activities, this.projectParticipants, allCards);
     } catch (err) {
       console.error('Erro ao carregar comentários:', err);
     }
@@ -512,7 +639,7 @@ export class CardDetailPanel {
     return icons[type] || '📌';
   }
 
-  private buildHtml(card: Card, activities: Comment[], participants: ProjectParticipant[] = []): string {
+  private buildHtml(card: Card, activities: Comment[], participants: ProjectParticipant[] = [], allCards: Card[] = []): string {
     const labels = card.labels
       .map((l) => `<span class="label" style="background:${this.escape(l.color)}">${this.escape(l.text)}</span>`)
       .join('');
@@ -1069,6 +1196,10 @@ export class CardDetailPanel {
     .option-name { font-size: 0.9em; }
     .section-toggle { cursor: pointer; margin-right: 4px; }
     .section-toggle:hover { opacity: 0.7; }
+    .sidebar-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; background: var(--vscode-editor-background); padding: 8px; border-radius: 4px; }
+    .sidebar-tab { background: var(--vscode-button-secondaryBackground); color: var(--vscode-foreground); border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sidebar-tab:hover { background: var(--vscode-button-hoverBackground); }
+    .sidebar-tab.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
   </style>
 </head>
 <body>
@@ -1913,6 +2044,9 @@ export class CardDetailPanel {
         return;
       }
     });
+    window.switchCard = function(cardId) {
+      vscode.postMessage({ command: 'switchCard', cardId: cardId });
+    };
     </script>
   <div id="image-modal" onclick="window.closeModal()">
     <span class="close" onclick="window.closeModal()">&times;</span>

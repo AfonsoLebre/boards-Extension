@@ -125,6 +125,11 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "anturio.viewCardDetailsSidebar",
+        "title": "Ver em Sidebar",
+        "icon": "$(split-horizontal)"
+      },
+      {
         "command": "anturio.moveCard",
         "title": "Mover Card"
       },
@@ -184,6 +189,11 @@
       "view/item/context": [
         {
           "command": "anturio.viewCardDetails",
+          "when": "viewItem == card",
+          "group": "inline"
+        },
+        {
+          "command": "anturio.viewCardDetailsSidebar",
           "when": "viewItem == card",
           "group": "inline"
         },

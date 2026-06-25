@@ -107,7 +107,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     vscode.commands.registerCommand('anturio.viewCardDetails', (item) => {
-      if (item?.data) CardDetailPanel.show(item.data as Card);
+      // Handle both direct Card and TreeItem with Card data
+      const card = (item as any)?.data?.id ? (item as any).data as Card : item as Card;
+      if (card?.id) CardDetailPanel.show(card);
+    }),
+
+    vscode.commands.registerCommand('anturio.viewCardDetailsSidebar', async (item) => {
+      // Handle both direct Card and TreeItem with Card data
+      const card = (item as any)?.data?.id ? (item as any).data as Card : item as Card;
+      if (card?.id) {
+        console.log('[Extension] Opening sidebar for card:', card.id, card.title);
+        // Check if sidebar already exists
+        if (!CardDetailPanel.hasSidebar()) {
+          console.log('[Extension] Creating new split');
+          // First time: create split editor
+          await vscode.commands.executeCommand('workbench.action.splitEditor');
+          await new Promise(resolve => setTimeout(resolve, 50));
+        } else {
+          console.log('[Extension] Reusing existing sidebar');
+        }
+        // Then open in Two (if first time) or reuse sidebar
+        CardDetailPanel.showInTwo(card);
+      }
     }),
 
     vscode.commands.registerCommand('anturio.moveCard', (item) => {
