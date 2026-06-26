@@ -21,6 +21,7 @@ export class CardDetailPanel {
   private card!: Card;
   private currentUser: CurrentUser | null = null;
   private projectParticipants: ProjectParticipant[] = [];
+  private isPreview: boolean = false;
 
   private constructor(card: Card) {
     this.card = card; // Inicializar logo para fallback
@@ -64,7 +65,7 @@ export class CardDetailPanel {
 
       const activities = await boardsClient.getComments(cardId);
       const allCards = CardDetailPanel.sidebarCards.get('sidebar') || [];
-      this.panel.webview.html = this.buildHtml(fullCard, activities, this.projectParticipants, allCards);
+      this.panel.webview.html = this.buildHtml(fullCard, activities, this.projectParticipants, allCards, this.isPreview);
     } catch (err) {
       console.error('[CardDetailPanel] Erro ao carregar detalhes, a usar fallback:', err);
       // Fallback para o cartão original se falhar
@@ -80,11 +81,11 @@ export class CardDetailPanel {
         }
         try {
           const activities = await boardsClient.getComments(cardId);
-          this.panel.webview.html = this.buildHtml(fallbackCard, activities, this.projectParticipants);
+          this.panel.webview.html = this.buildHtml(fallbackCard, activities, this.projectParticipants, [], this.isPreview);
         } catch (e2) {
           console.error('[CardDetailPanel] Erro ao carregar comentários no fallback:', e2);
           // Mostrar mesmo sem comentários se falhar
-          this.panel.webview.html = this.buildHtml(fallbackCard, [], this.projectParticipants);
+          this.panel.webview.html = this.buildHtml(fallbackCard, [], this.projectParticipants, [], this.isPreview);
         }
       }
     }
@@ -546,6 +547,7 @@ export class CardDetailPanel {
           console.log('[Sidebar] Found existing panel for card', key, '- reloading');
           // Update card data and reload
           (existingPanel as any).card = card;
+          (existingPanel as any).isPreview = true;
           (existingPanel as any).loadCardDetails(card.id, card);
           (existingPanel as any).panel.reveal();
           return;
@@ -581,6 +583,7 @@ export class CardDetailPanel {
         // Switch to new card - always fetch fresh from server
         (existingPanel as any).card = card;
         (existingPanel as any).panelKey = key;
+        (existingPanel as any).isPreview = true;
         (existingPanel as any).panel.title = card.title;
         (existingPanel as any).loadCardDetails(card.id, card);
         (existingPanel as any).panel.reveal();
@@ -604,6 +607,7 @@ export class CardDetailPanel {
     (panelInstance as any).card = card;
     (panelInstance as any).currentUser = null;
     (panelInstance as any).projectParticipants = [];
+    (panelInstance as any).isPreview = true;
     panel.title = card.title;
     panel.onDidDispose(() => {
       CardDetailPanel.panels.delete(key);
@@ -619,7 +623,7 @@ export class CardDetailPanel {
     try {
       const activities = await boardsClient.getComments(cardId);
       const allCards = CardDetailPanel.sidebarCards.get('sidebar') || [];
-      this.panel.webview.html = this.buildHtml(this.card, activities, this.projectParticipants, allCards);
+      this.panel.webview.html = this.buildHtml(this.card, activities, this.projectParticipants, allCards, this.isPreview);
     } catch (err) {
       console.error('Erro ao carregar comentários:', err);
     }
@@ -1240,6 +1244,72 @@ export class CardDetailPanel {
       max-width: calc(100% - 12px);
       margin-left: 12px;
     }
+    /* Botão de acesso a comentários/histórico em modo preview */
+    body.preview-mode .preview-comments-toggle-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 16px;
+      padding: 10px 14px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.88em;
+      font-family: var(--vscode-font-family);
+      transition: background 0.15s;
+      justify-content: space-between;
+    }
+    body.preview-mode .preview-comments-toggle-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    body.preview-mode .preview-comments-toggle-btn .badge {
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 0.82em;
+      font-weight: 600;
+    }
+    /* Painel de comentários/histórico em overlay para modo preview */
+    .preview-comments-panel {
+      display: none;
+    }
+    body.preview-mode .preview-comments-panel {
+      display: none;
+      flex-direction: column;
+    }
+    body.preview-mode .preview-comments-panel.active {
+      display: flex;
+    }
+    body.preview-mode .preview-comments-panel .preview-back-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--vscode-button-background);
+      border: none;
+      color: var(--vscode-button-foreground);
+      cursor: pointer;
+      font-size: 0.85em;
+      font-family: var(--vscode-font-family);
+      padding: 8px 14px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      transition: background 0.15s;
+    }
+    body.preview-mode .preview-comments-panel .preview-back-btn:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    body.preview-mode .preview-comments-panel .right-column-switch {
+      margin-bottom: 12px;
+    }
+    /* Esconder a coluna de comentários/histórico inline no modo preview (usa painel overlay) */
+    body.preview-mode .right-column,
+    body.preview-mode .resize-handle {
+      display: none !important;
+    }
   </style>
 </head>
 <body class="${isPreview ? 'preview-mode' : ''}">
@@ -1270,6 +1340,11 @@ export class CardDetailPanel {
   ${checklistsHtml}
   ${descriptionHtml}
   ${attachmentsHtml}
+  <!-- Botão para aceder a comentários e histórico (apenas em preview-mode) -->
+  <button class="preview-comments-toggle-btn" id="preview-comments-toggle-btn" onclick="window.showPreviewComments()" style="display:none;">
+    <span>💬 Ver Comentários e Histórico</span>
+    <span class="badge" id="preview-comments-badge">${comments.length + history.length}</span>
+  </button>
   </div>
   <div class="resize-handle" id="resize-handle"></div>
   <div class="right-column" id="right-column">
@@ -1280,6 +1355,16 @@ export class CardDetailPanel {
   <div id="right-panel-comments" class="right-panel-content active">${commentsHtml}</div>
   <div id="right-panel-history" class="right-panel-content" style="display:none;">${historyHtml}</div>
   </div>
+  </div>
+  <!-- Painel de comentários/histórico separado para preview-mode -->
+  <div class="preview-comments-panel" id="preview-comments-panel">
+    <button class="preview-back-btn" onclick="window.hidePreviewComments()">&#8592; Voltar ao cartão</button>
+    <div class="right-column-switch">
+      <button class="switch-btn active" id="preview-switch-comments-btn" onclick="window.showPreviewPanel('comments')">Comentários</button>
+      <button class="switch-btn" id="preview-switch-history-btn" onclick="window.showPreviewPanel('history')">Histórico</button>
+    </div>
+    <div id="preview-panel-comments" class="right-panel-content active">${commentsHtml}</div>
+    <div id="preview-panel-history" class="right-panel-content" style="display:none;">${historyHtml}</div>
   </div>
   <script>
     window.showImage = function(dataUrl) {
@@ -1302,6 +1387,45 @@ export class CardDetailPanel {
         historyPanel.style.display = 'block';
       }
     };
+    // Preview-mode: alternar entre painel do cartão e painel de comentários
+    window.showPreviewComments = function(panel) {
+      var mainContainer = document.getElementById('main-container');
+      var previewPanel = document.getElementById('preview-comments-panel');
+      if (mainContainer) mainContainer.style.display = 'none';
+      if (previewPanel) previewPanel.classList.add('active');
+      // Mostrar o sub-painel pedido (default: comments)
+      window.showPreviewPanel(panel || 'comments');
+    };
+    window.hidePreviewComments = function() {
+      var mainContainer = document.getElementById('main-container');
+      var previewPanel = document.getElementById('preview-comments-panel');
+      if (mainContainer) mainContainer.style.display = '';
+      if (previewPanel) previewPanel.classList.remove('active');
+    };
+    window.showPreviewPanel = function(panel) {
+      var commentsBtn = document.getElementById('preview-switch-comments-btn');
+      var historyBtn = document.getElementById('preview-switch-history-btn');
+      var commentsPanel = document.getElementById('preview-panel-comments');
+      var historyPanel = document.getElementById('preview-panel-history');
+      if (!commentsBtn || !commentsPanel) return;
+      if (panel === 'comments') {
+        commentsBtn.classList.add('active');
+        historyBtn.classList.remove('active');
+        commentsPanel.style.display = 'block';
+        historyPanel.style.display = 'none';
+      } else {
+        commentsBtn.classList.remove('active');
+        historyBtn.classList.add('active');
+        commentsPanel.style.display = 'none';
+        historyPanel.style.display = 'block';
+      }
+    };
+    // Activar botão de toggle apenas em preview-mode
+    (function() {
+      var isPreview = document.body.classList.contains('preview-mode');
+      var toggleBtn = document.getElementById('preview-comments-toggle-btn');
+      if (isPreview && toggleBtn) toggleBtn.style.display = 'flex';
+    })();
     window.showImage = function(dataUrl) {
       var modal = document.getElementById('image-modal');
       var modalImg = document.getElementById('modal-img');
