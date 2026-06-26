@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { boardsClient, Project, Column, Card } from '../api/boardsClient';
 
-type ItemType = 'project' | 'column' | 'card' | 'empty' | 'error';
+type ItemType = 'project' | 'column' | 'card' | 'card-detail' | 'empty' | 'error';
 
 export class AnturioTreeItem extends vscode.TreeItem {
   constructor(
@@ -38,6 +38,9 @@ export class AnturioTreeItem extends vscode.TreeItem {
         break;
       case 'error':
         this.iconPath = new vscode.ThemeIcon('error');
+        break;
+      case 'card-detail':
+        this.iconPath = new vscode.ThemeIcon('info');
         break;
     }
   }
@@ -78,6 +81,7 @@ export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> 
     if (!element) return this.loadProjects();
     if (element.itemType === 'project') return this.loadColumns(element.data as Project);
     if (element.itemType === 'column') return this.loadCards(element.data as Column, element.projectId!);
+    if (element.itemType === 'card') return this.loadCardDetails(element.data as Card);
     return [];
   }
 
@@ -215,6 +219,77 @@ export class BoardsProvider implements vscode.TreeDataProvider<AnturioTreeItem> 
       item.command = { command: 'anturio.openCard', title: 'Abrir Card', arguments: [card] };
       return item;
     });
+  }
+
+  async loadCardDetails(card: Card): Promise<AnturioTreeItem[]> {
+    const details: AnturioTreeItem[] = [];
+
+    // Descrição
+    if (card.description) {
+      details.push(new AnturioTreeItem(
+        `📝 ${card.description.substring(0, 50)}${card.description.length > 50 ? '...' : ''}`,
+        vscode.TreeItemCollapsibleState.None,
+        'card-detail',
+        card,
+        card.project_id,
+      ));
+    }
+
+    // Labels
+    if (card.labels && card.labels.length > 0) {
+      details.push(new AnturioTreeItem(
+        `🏷️ ${card.labels.map(l => l.text).join(', ')}`,
+        vscode.TreeItemCollapsibleState.None,
+        'card-detail',
+        card,
+        card.project_id,
+      ));
+    }
+
+    // Data início
+    if (card.start_date) {
+      details.push(new AnturioTreeItem(
+        `📅 Início: ${new Date(card.start_date).toLocaleDateString('pt-PT')}`,
+        vscode.TreeItemCollapsibleState.None,
+        'card-detail',
+        card,
+        card.project_id,
+      ));
+    }
+
+    // Data limite
+    if (card.due_date) {
+      details.push(new AnturioTreeItem(
+        `⏰ Prazo: ${new Date(card.due_date).toLocaleDateString('pt-PT')}`,
+        vscode.TreeItemCollapsibleState.None,
+        'card-detail',
+        card,
+        card.project_id,
+      ));
+    }
+
+    // Membros
+    if (card.members && card.members.length > 0) {
+      details.push(new AnturioTreeItem(
+        `👤 ${card.members.map(m => m.name || m.email).join(', ')}`,
+        vscode.TreeItemCollapsibleState.None,
+        'card-detail',
+        card,
+        card.project_id,
+      ));
+    }
+
+    if (details.length === 0) {
+      details.push(new AnturioTreeItem(
+        'Clique para ver detalhes completos',
+        vscode.TreeItemCollapsibleState.None,
+        'card-detail',
+        card,
+        card.project_id,
+      ));
+    }
+
+    return details;
   }
 
   private async ensureProjectData(projectId: number): Promise<void> {

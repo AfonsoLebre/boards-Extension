@@ -76,7 +76,10 @@
       "Bash(npm run)",
       "Bash(rm -rf out)",
       "Bash(node build.js)",
-      "Bash(npx tsc --skipLibCheck)"
+      "Bash(npx tsc --skipLibCheck)",
+      "Bash(npm run typecheck)",
+      "Bash(npx tsc -p tsconfig.json)",
+      "Bash(npx tsc --noEmit --strictPropertyInitialization false)"
     ]
   }
 }

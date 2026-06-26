@@ -17,7 +17,7 @@ export class CardDetailPanel {
   private static panels = new Map<string, CardDetailPanel>();
   private static sidebarCards = new Map<string, Card[]>(); // Store all cards opened in sidebar
   private readonly panel: vscode.WebviewPanel;
-  private readonly panelKey: string;
+  private panelKey: string;
   private card!: Card;
   private currentUser: CurrentUser | null = null;
   private projectParticipants: ProjectParticipant[] = [];
@@ -639,7 +639,7 @@ export class CardDetailPanel {
     return icons[type] || '📌';
   }
 
-  private buildHtml(card: Card, activities: Comment[], participants: ProjectParticipant[] = [], allCards: Card[] = []): string {
+  private buildHtml(card: Card, activities: Comment[], participants: ProjectParticipant[] = [], allCards: Card[] = [], isPreview: boolean = false): string {
     const labels = card.labels
       .map((l) => `<span class="label" style="background:${this.escape(l.color)}">${this.escape(l.text)}</span>`)
       .join('');
@@ -1200,9 +1200,49 @@ export class CardDetailPanel {
     .sidebar-tab { background: var(--vscode-button-secondaryBackground); color: var(--vscode-foreground); border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85em; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sidebar-tab:hover { background: var(--vscode-button-hoverBackground); }
     .sidebar-tab.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+    
+    /* Estilos específicos para o modo de pré-visualização (barra lateral compacta) */
+    body.preview-mode {
+      padding: 12px;
+      font-size: 0.9em;
+    }
+    body.preview-mode h1 {
+      font-size: 1.15em;
+    }
+    body.preview-mode .main-container {
+      flex-direction: column;
+    }
+    body.preview-mode .resize-handle {
+      display: none;
+    }
+    body.preview-mode .left-column {
+      padding: 0 0 12px 0;
+      max-height: none;
+      overflow-y: visible;
+    }
+    body.preview-mode .right-column {
+      width: 100%;
+      max-width: 100%;
+      padding: 12px 0 0 0;
+      border-left: none;
+      border-top: 1px solid var(--vscode-panel-border);
+      max-height: none;
+      overflow-y: visible;
+    }
+    body.preview-mode section {
+      margin-top: 12px;
+      padding-top: 12px;
+    }
+    body.preview-mode .comment {
+      max-width: 100%;
+    }
+    body.preview-mode .comment.is-reply {
+      max-width: calc(100% - 12px);
+      margin-left: 12px;
+    }
   </style>
 </head>
-<body>
+<body class="${isPreview ? 'preview-mode' : ''}">
   <div class="main-container" id="main-container">
   <div class="left-column" id="left-column">
   <h1 class="card-title" id="card-title" ondblclick="window.startEditTitle()">${this.escape(card.title)}</h1>
@@ -2105,5 +2145,15 @@ export class CardDetailPanel {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  // Método estático para usar no CardPreviewView (WebviewView)
+  public static buildCardHtml(card: any, comments: Comment[], currentUser: CurrentUser | null = null, participants: ProjectParticipant[] = [], allCards: Card[] = [], isPreview: boolean = false): string {
+    const instance = Object.create(CardDetailPanel.prototype);
+    instance.card = card;
+    instance.currentUser = currentUser;
+    instance.projectParticipants = participants;
+    instance.isPreview = isPreview;
+    return instance.buildHtml(card, comments, participants, allCards, isPreview);
   }
 }

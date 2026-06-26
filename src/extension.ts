@@ -7,6 +7,7 @@ import { boardsClient } from './api/boardsClient';
 import { BoardsProvider } from './views/BoardsProvider';
 import { CardDetailPanel } from './views/CardDetailPanel';
 import { BoardPanel } from './views/BoardPanel';
+import { CardPreviewView } from './views/CardPreviewView';
 import { createCardCommand, createCardFromSelectionCommand, createCardInColumnCommand } from './commands/createCard';
 import { linkCommitCommand, setupGitPostCommitHook } from './commands/linkCommit';
 import { aiSuggestCardCommand } from './ai/aiAssistant';
@@ -30,9 +31,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     dragAndDropController: provider.dragAndDropController,
   });
   context.subscriptions.push(projectsView);
+
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('anturio.welcomeView', provider),
   );
+
+  // Register card preview webview
+  CardPreviewView.register(context);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(async (e) => {
@@ -48,7 +53,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('anturio.refresh', () => provider.refresh()),
+    vscode.commands.registerCommand('anturio.refresh', () => {
+      provider.refresh();
+    }),
 
     vscode.commands.registerCommand('anturio.openSettings', () =>
       vscode.commands.executeCommand('workbench.action.openSettings', 'anturio'),
@@ -103,13 +110,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         lastOpenTime = now;
         lastOpenCardId = card.id;
         CardDetailPanel.show(card);
+        CardPreviewView.setCard(card);
       }
     }),
 
     vscode.commands.registerCommand('anturio.viewCardDetails', (item) => {
       // Handle both direct Card and TreeItem with Card data
       const card = (item as any)?.data?.id ? (item as any).data as Card : item as Card;
-      if (card?.id) CardDetailPanel.show(card);
+      if (card?.id) {
+        CardDetailPanel.show(card);
+        CardPreviewView.setCard(card);
+      }
     }),
 
     vscode.commands.registerCommand('anturio.viewCardDetailsSidebar', async (item) => {
@@ -128,6 +139,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
         // Then open in Two (if first time) or reuse sidebar
         CardDetailPanel.showInTwo(card);
+        CardPreviewView.setCard(card);
       }
     }),
 

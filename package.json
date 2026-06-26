@@ -73,6 +73,11 @@
           "dragDrop": true
         },
         {
+          "id": "anturio.cardPreview",
+          "name": "Cartão",
+          "type": "webview"
+        },
+                {
           "id": "anturio.welcomeView",
           "name": "Anturio Boards",
           "when": "!anturio.authenticated"
