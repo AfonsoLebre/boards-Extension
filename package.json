@@ -75,7 +75,8 @@
         {
           "id": "anturio.cardPreview",
           "name": "Cartão",
-          "type": "webview"
+          "type": "webview",
+          "when": "anturio.authenticated"
         },
                 {
           "id": "anturio.welcomeView",
