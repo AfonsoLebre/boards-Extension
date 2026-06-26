@@ -3,7 +3,6 @@ import { Card, Comment, CurrentUser, boardsClient, CardAttachment, ProjectPartic
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import * as cp from 'child_process';
 
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -190,14 +189,12 @@ export class CardDetailPanel {
           const tempFilePath = path.join(os.tmpdir(), safeName);
           fs.writeFileSync(tempFilePath, buffer);
           console.log('[CardDetailPanel] Temp file written:', tempFilePath);
-          // Abrir com a aplicação padrão do SO (mais fiável que vscode.env.openExternal para ficheiros locais)
-          if (process.platform === 'win32') {
-            cp.exec(`start "" "${tempFilePath}"`);
-          } else if (process.platform === 'darwin') {
-            cp.exec(`open "${tempFilePath}"`);
-          } else {
-            cp.exec(`xdg-open "${tempFilePath}"`);
-          }
+          // Usar vscode.env.openExternal (API nativa do VS Code — ShellExecute em
+          // Windows) em vez do cp.exec platform-specific, que falhava silenciosamente
+          // em Windows para ficheiros como .js (cmd.exe tenta executar via WSH) e
+          // .md (sem associação OU associada ao próprio VS Code, criando uma janela
+          // invisível).
+          await vscode.env.openExternal(vscode.Uri.file(tempFilePath));
         } else {
           // URL externo — abrir no browser
           vscode.env.openExternal(vscode.Uri.parse(att.url));
