@@ -75,6 +75,7 @@ export interface Card {
   attachments?: CardAttachment[];
   project_id?: number;
   checklists?: Checklist[];
+  archived?: boolean;
 }
 
 export interface ProjectCardsResponse {

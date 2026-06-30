@@ -148,6 +148,10 @@
         "title": "Apagar Card"
       },
       {
+        "command": "anturio.archiveCard",
+        "title": "Arquivar Card"
+      },
+      {
         "command": "anturio.signOut",
         "title": "Anturio: Terminar Sessão"
       },
@@ -217,6 +221,11 @@
           "command": "anturio.deleteCard",
           "when": "viewItem == card",
           "group": "navigation@3"
+        },
+        {
+          "command": "anturio.archiveCard",
+          "when": "viewItem == card",
+          "group": "navigation@4"
         },
         {
           "command": "anturio.createCardInColumn",

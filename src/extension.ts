@@ -15,6 +15,7 @@ import { startMcpHttpCommand, stopMcpHttpCommand, getTunnelUrl } from './command
 import { moveCardCommand } from './commands/moveCard';
 import { editCardCommand } from './commands/editCard';
 import { deleteCardCommand } from './commands/deleteCard';
+import { archiveCardCommand } from './commands/archiveCard';
 import { Card } from './api/boardsClient';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -153,6 +154,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     vscode.commands.registerCommand('anturio.deleteCard', async (item) => {
       if (item?.data) await deleteCardCommand(item.data as Card);
+    }),
+
+    vscode.commands.registerCommand('anturio.archiveCard', (item) => {
+      if (item?.data) archiveCardCommand(item.data as Card);
     }),
 
     vscode.commands.registerCommand('anturio.signOut', async () => {
