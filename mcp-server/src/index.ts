@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails } from './api.js';
 
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
@@ -118,6 +118,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'get_card_comments',
       description: 'Mostra os comentários de um card. Usa get_project_cards para descobrir o ID do card.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do card' },
+        },
+        required: ['card_id'],
+      },
+    },
+    {
+      name: 'get_card',
+      description: 'Mostra todos os detalhes de um card: título, descrição, checklists, anexos, membros, etiquetas, datas (início e limite), prioridade e coluna atual. Inclui também comentários e histórico de atividades.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -338,6 +349,143 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         return { content: [{ type: 'text', text: `**Comentários (${lines.length}):**\n\n${lines.join('\n\n')}` }] };
       }
 
+      case 'get_card': {
+        const a = args as { card_id: number };
+        const card = await getCardDetails(a.card_id);
+        const comments = await getCardComments(a.card_id);
+
+        const lines: string[] = [];
+
+        // Título e ID
+        lines.push(`## 📝 ${card.title} (ID: ${card.id})`);
+        lines.push('');
+
+        // Coluna/Status
+        lines.push(`**Coluna:** ${card.status_label}`);
+        lines.push('');
+
+        // Prioridade
+        const priorityIcons: Record<string, string> = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' };
+        lines.push(`**Prioridade:** ${priorityIcons[card.priority] || '⚪'} ${card.priority}`);
+        lines.push('');
+
+        // Datas
+        if (card.start_date || card.due_date) {
+          if (card.start_date) {
+            lines.push(`**Data de Início:** ${card.start_date}`);
+          }
+          if (card.due_date) {
+            lines.push(`**Data Limite:** ${card.due_date}`);
+          }
+          lines.push('');
+        }
+
+        // Membros
+        if (card.members && card.members.length > 0) {
+          const memberNames = card.members.map((m) => m.name || m.email).join(', ');
+          lines.push(`**Membros:** ${memberNames}`);
+          lines.push('');
+        }
+
+        // Etiquetas/Labels
+        if (card.labels && card.labels.length > 0) {
+          const labelTexts = card.labels.map((l) => `[${l.text}]`).join(' ');
+          lines.push(`**Etiquetas:** ${labelTexts}`);
+          lines.push('');
+        }
+
+        // Descrição principal
+        if (card.description) {
+          const cleanDesc = cleanHtmlDescription(card.description);
+          if (cleanDesc) {
+            lines.push('**Descrição:**');
+            lines.push(cleanDesc);
+            lines.push('');
+          }
+        }
+
+        // Descrições adicionais
+        if (card.descriptions && card.descriptions.length > 0) {
+          lines.push('**Descrições Adicionais:**');
+          for (const desc of card.descriptions) {
+            const cleanContent = cleanHtmlDescription(desc.content);
+            if (cleanContent) {
+              lines.push(`\n### ${desc.title}`);
+              lines.push(cleanContent);
+            }
+          }
+          lines.push('');
+        }
+
+        // Checklists
+        if (card.checklists && card.checklists.length > 0) {
+          lines.push('**Checklists:**');
+          for (const checklist of card.checklists) {
+            // Safety check: ensure checklist and items exist
+            const items = checklist.items || [];
+            const completed = items.filter((i) => i && i.completed).length;
+            const total = items.length;
+            lines.push(`\n### ${checklist.title || 'Sem título'} (${completed}/${total})`);
+            // Debug: show raw data if items seem wrong
+            if (total === 0) {
+              lines.push('_Checklist vazia_');
+            } else if (total === 1 && items[0]) {
+              // If only one item, show raw JSON for debugging
+              lines.push(`_Debug - item: ${JSON.stringify(items[0])}_`);
+            }
+            for (const item of items) {
+              if (item && item.title) {
+                const check = item.completed ? '☑️' : '⬜';
+                lines.push(`${check} ${item.title}`);
+              }
+            }
+          }
+          lines.push('');
+        } else {
+          lines.push('_Nenhuma checklist_');
+        }
+
+        // Anexos
+        if (card.attachments && card.attachments.length > 0) {
+          lines.push('**Anexos:**');
+          for (const att of card.attachments) {
+            // Safety: ensure attachment has required fields
+            if (att && att.name && att.url) {
+              const typeIcon = att.type?.startsWith('image/') ? '🖼️' : '📎';
+              lines.push(`- ${typeIcon} [${att.name}](${att.url})`);
+            }
+          }
+          lines.push('');
+        }
+
+        // Comentários e Histórico
+        if (comments.length > 0) {
+          const commentItems = comments.filter((c) => c.type === 'comment');
+          const historyItems = comments.filter((c) => c.type !== 'comment');
+
+          lines.push(`**Comentários e Histórico (${comments.length}):**`);
+
+          for (const c of comments) {
+            const dateStr = new Date(c.created_at).toLocaleString('pt-PT');
+            if (c.type === 'comment') {
+              lines.push(`\n💬 **${c.user_name}** (${dateStr}):\n${c.content}`);
+            } else {
+              const iconMap: Record<string, string> = {
+                card_created: '✨',
+                status_changed: '📍',
+                moved: '➡️',
+                priority_changed: '🔢',
+                comment: '💬',
+              };
+              const icon = iconMap[c.type] || '📋';
+              lines.push(`\n${icon} **${c.user_name}** (${dateStr}) — ${c.type}:\n${c.content}`);
+            }
+          }
+        }
+
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
+      }
+
       default:
         return { content: [{ type: 'text', text: `Ferramenta desconhecida: ${name}` }] };
     }
@@ -348,6 +496,18 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 });
 
 async function main() {
+  const API_KEY = process.env.ANTURIO_API_KEY ?? '';
+  const SERVER_URL = process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3000';
+
+  if (!API_KEY) {
+    process.stderr.write('ERRO: ANTURIO_API_KEY não definida\n');
+    process.exit(1);
+  }
+
+  process.stderr.write(`[MCP] Anturio Boards MCP Server v0.1.0 iniciando...\n`);
+  process.stderr.write(`[MCP] Transport: ${TRANSPORT}\n`);
+  process.stderr.write(`[MCP] Server URL: ${SERVER_URL}\n`);
+
   if (TRANSPORT === 'http') {
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
@@ -360,15 +520,31 @@ async function main() {
       res.writeHead(200, { 'Content-Type': 'text/plain' });
       res.end('Anturio Boards MCP Server — POST to /mcp');
     });
-    const server = app.listen(PORT, () => console.error(`Anturio Boards MCP running on http://localhost:${PORT}/mcp`));
+    const server = app.listen(PORT, () => {
+      process.stderr.write(`[MCP] HTTP server pronto em http://localhost:${PORT}/mcp\n`);
+    });
     await new Promise<void>((resolve) => server.on('close', resolve));
   } else {
     const transport = new StdioServerTransport();
     await server.connect(transport);
+    process.stderr.write(`[MCP] Servidor stdio conectado e pronto\n`);
   }
 }
 
+process.on('unhandledRejection', (reason, promise) => {
+  process.stderr.write(`[MCP] ERRO: Promise rejection não tratada: ${reason}\n`);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (err) => {
+  process.stderr.write(`[MCP] ERRO: Exceção não capturada: ${err}\n`);
+  process.exit(1);
+});
+
 main().catch((err) => {
-  process.stderr.write(`Erro fatal: ${err}\n`);
+  process.stderr.write(`[MCP] ERRO FATAL ao iniciar: ${err}\n`);
+  if (err.stack) {
+    process.stderr.write(`${err.stack}\n`);
+  }
   process.exit(1);
 });

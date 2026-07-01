@@ -79,7 +79,23 @@
       "Bash(npx tsc --skipLibCheck)",
       "Bash(npm run typecheck)",
       "Bash(npx tsc -p tsconfig.json)",
-      "Bash(npx tsc --noEmit --strictPropertyInitialization false)"
+      "Bash(npx tsc --noEmit --strictPropertyInitialization false)",
+      "Bash(echo \"$HOME\")",
+      "Read(//c/Users/Duarte Tavares/Documents/Anturio/boards-Extension/mcp-server/$HOME/**)",
+      "Bash(curl -s http://localhost:3000/server-api/api/tarefas/50 -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\")",
+      "Bash(curl -s \"http://localhost:3000/api/v1/projects/50/cards\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\")",
+      "Bash(curl -s \"http://localhost:3000/server-api/api/tarefas/1782824974590\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\")",
+      "Bash(cd c:/Users/Duarte Tavares/Documents/Anturio/boards-Extension/mcp-server)",
+      "Bash(curl -s \"http://localhost:3000/server-api/api/tarefas\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\")",
+      "Bash(claude skill *)",
+      "Bash(node dist/index.js --version)",
+      "Bash(ANTURIO_API_KEY=\"ant_test\" ANTURIO_SERVER_URL=\"https://boards.anturio.app\" TRANSPORT=\"stdio\" node dist/index.js <<< '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}')",
+      "Bash(chmod +x *)",
+      "Bash(bash test-mcp.sh)",
+      "Bash(npm run *)",
+      "Bash(ls -la \"C:/Users/Duarte Tavares/Documents/Anturio/Anturio-Trello\")",
+      "Read(//c/Users/Duarte Tavares/Documents/Anturio/Anturio-Trello/**)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://boards.anturio.app/api/tarefas/1\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\")"
     ]
   }
 }

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://boards.anturio.app/api/v1/projects/50/cards\" -H \"X-API-Key: ant_0a25f35f34161e7c433bd64891d291d20c056d674d55a0f7afb6f711378cd366\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d['cards'][0] if d['cards'] else 'no cards', indent=2\\)[:300]\\)\")"
+    ]
+  }
+}

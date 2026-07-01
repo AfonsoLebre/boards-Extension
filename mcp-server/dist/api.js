@@ -1,4 +1,4 @@
-const SERVER_URL = (process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+const SERVER_URL = (process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const API_KEY = process.env.ANTURIO_API_KEY ?? '';
 async function request(method, path, body) {
     if (!API_KEY)
@@ -27,7 +27,17 @@ export async function getProjectCards(projectId) {
     return { columns: data.columns, cards: data.cards };
 }
 export async function createCard(projectId, payload) {
-    return request('POST', `/api/v1/projects/${projectId}/cards`, payload);
+    // O endpoint de criação usa `status` para a coluna (no modelo, card.status === column.id).
+    // Enviamos também `columnId` por compatibilidade.
+    const body = {
+        title: payload.title,
+        description: payload.description,
+        status: payload.columnId,
+        columnId: payload.columnId,
+        priority: payload.priority,
+        due_date: payload.due_date,
+    };
+    return request('POST', `/api/v1/projects/${projectId}/cards`, body);
 }
 export async function moveCard(cardId, columnId) {
     return request('PATCH', `/api/v1/cards/${cardId}`, { columnId });
@@ -37,4 +47,7 @@ export async function deleteCard(cardId) {
 }
 export async function getCardComments(cardId) {
     return request('GET', `/api/tarefas/${cardId}/activities`);
+}
+export async function getCardDetails(cardId) {
+    return request('GET', `/api/tarefas/${cardId}`);
 }

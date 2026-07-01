@@ -187,6 +187,74 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand('anturio.openBoard', () => {
       BoardPanel.show(context.extensionUri);
     }),
+
+    vscode.commands.registerCommand('anturio.mcpStatus', async () => {
+      const apiKey = vscode.workspace.getConfiguration('anturio').get<string>('apiKey', '');
+      if (!apiKey) {
+        vscode.window.showWarningMessage('API Key do Anturio não configurada.');
+        return;
+      }
+
+      const parentMcpPath = path.join(context.extensionPath, '..', 'mcp-server', 'dist', 'index.js');
+      const siblingMcpPath = path.join(context.extensionPath, 'mcp-server', 'dist', 'index.js');
+      const mcpServerPath = fs.existsSync(parentMcpPath)
+        ? parentMcpPath
+        : fs.existsSync(siblingMcpPath)
+          ? siblingMcpPath
+          : null;
+
+      const statusLines: string[] = [];
+      statusLines.push('**Estado do Servidor MCP do Anturio Boards**\n');
+
+      if (!mcpServerPath) {
+        statusLines.push('❌ Servidor MCP não encontrado');
+        statusLines.push(`   Procurado em: ${parentMcpPath}`);
+        statusLines.push(`   E em: ${siblingMcpPath}`);
+      } else {
+        statusLines.push(`✅ Servidor MCP encontrado: ${mcpServerPath}`);
+      }
+
+      statusLines.push(`\n**Processo:** ${mcpProcess ? '✅ A correr' : '❌ Parado'}`);
+      statusLines.push(`**API Key:** ${apiKey ? '✅ Configurada' : '❌ Não configurada'}`);
+
+      const claudeConfigPath = path.join(os.homedir(), '.claude', 'settings.json');
+      const claudeConfigExists = fs.existsSync(claudeConfigPath);
+      statusLines.push(`**Configuração Claude Code:** ${claudeConfigExists ? '✅ Existe' : '⚠️ Não existe'}`);
+
+      if (claudeConfigExists) {
+        try {
+          const claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf-8'));
+          const hasMcpEntry = claudeConfig.mcpServers?.['anturio-boards'];
+          statusLines.push(`**Entrada MCP no Claude Code:** ${hasMcpEntry ? '✅ Configurada' : '⚠️ Não configurada'}`);
+        } catch {}
+      }
+
+      const message = statusLines.join('\n');
+      const action = await vscode.window.showInformationMessage(
+        message,
+        { modal: true },
+        'Reiniciar Servidor',
+        'Ver Logs',
+        'Fechar'
+      );
+
+      if (action === 'Reiniciar Servidor') {
+        if (mcpProcess) {
+          mcpProcess.kill();
+          mcpProcess = null;
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        if (mcpServerPath) {
+          await setupMcpConfig(context);
+          startMcpServer(context);
+          vscode.window.showInformationMessage('Servidor MCP reiniciado.');
+        } else {
+          vscode.window.showErrorMessage('Não é possível reiniciar: servidor MCP não encontrado.');
+        }
+      } else if (action === 'Ver Logs') {
+        vscode.commands.executeCommand('workbench.action.output.toggleOutput');
+      }
+    }),
   );
 
   setupGitPostCommitHook(context);
@@ -209,9 +277,22 @@ async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpSe
   const apiKey = config.get<string>('apiKey', '');
   const serverUrl = config.get<string>('serverUrl', 'https://boards.anturio.app');
 
-  const mcpServerPath = path.join(context.extensionPath, '..', 'mcp-server', 'dist', 'index.js');
+  // Use same logic as startMcpServer() to find the server
+  const parentMcpPath = path.join(context.extensionPath, '..', 'mcp-server', 'dist', 'index.js');
+  const siblingMcpPath = path.join(context.extensionPath, 'mcp-server', 'dist', 'index.js');
 
-  if (!fs.existsSync(mcpServerPath)) return null;
+  const mcpServerPath = fs.existsSync(parentMcpPath)
+    ? parentMcpPath
+    : fs.existsSync(siblingMcpPath)
+      ? siblingMcpPath
+      : null;
+
+  if (!mcpServerPath) {
+    console.error('[Anturio] MCP server not found at:', parentMcpPath, 'or', siblingMcpPath);
+    return null;
+  }
+
+  console.log('[Anturio] MCP server found at:', mcpServerPath);
 
   const mcpEntry = {
     command: 'node',
@@ -219,6 +300,7 @@ async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpSe
     env: {
       ANTURIO_API_KEY: apiKey,
       ANTURIO_SERVER_URL: serverUrl,
+      TRANSPORT: 'stdio',
     },
   };
 
@@ -280,44 +362,93 @@ function startMcpServer(context: vscode.ExtensionContext): void {
 
   if (!mcpServerPath) {
     console.error('[MCP] Could not find mcp-server at:', parentMcpPath, 'or', siblingMcpPath);
+    vscode.window.showWarningMessage(
+      'Servidor MCP do Anturio Boards não encontrado. A integração com Claude Code não estará disponível.',
+      'Ver Logs'
+    ).then(action => {
+      if (action === 'Ver Logs') {
+        vscode.commands.executeCommand('workbench.action.output.toggleOutput');
+      }
+    });
     return;
   }
+
+  console.log('[MCP] Found server at:', mcpServerPath);
 
   const config = vscode.workspace.getConfiguration('anturio');
   const apiKey = config.get<string>('apiKey', '');
   const serverUrl = config.get<string>('serverUrl', 'https://boards.anturio.app');
 
+  if (!apiKey) {
+    console.warn('[MCP] API Key not configured, skipping server start');
+    return;
+  }
+
   // Se já houver um processo, mata
   if (mcpProcess) {
+    console.log('[MCP] Killing existing process');
     mcpProcess.kill();
     mcpProcess = null;
   }
+
+  console.log('[MCP] Starting server with stdio transport...');
 
   mcpProcess = spawn('node', [mcpServerPath], {
     env: {
       ...process.env,
       ANTURIO_API_KEY: apiKey,
       ANTURIO_SERVER_URL: serverUrl,
+      TRANSPORT: 'stdio',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
+  let serverReady = false;
+
   mcpProcess.stdout?.on('data', (data) => {
     const msg = data.toString().trim();
-    if (msg) console.log(`[MCP] ${msg}`);
+    if (msg) {
+      console.log(`[MCP] ${msg}`);
+      if (msg.includes('[MCP] Servidor stdio conectado e pronto')) {
+        serverReady = true;
+        console.log('[MCP] Server confirmed ready');
+      }
+    }
   });
 
   mcpProcess.stderr?.on('data', (data) => {
-    console.error(`[MCP Error] ${data.toString().trim()}`);
+    const msg = data.toString().trim();
+    console.error(`[MCP Error] ${msg}`);
+    if (msg.includes('ERRO')) {
+      vscode.window.showErrorMessage(`Anturio MCP: ${msg.replace(/\[MCP.*?\]/g, '').trim()}`);
+    }
   });
 
   mcpProcess.on('error', (err) => {
     console.error(`[MCP Process Error] ${err.message}`);
+    vscode.window.showErrorMessage(
+      `Erro ao iniciar servidor MCP do Anturio: ${err.message}`,
+      'Ver Logs'
+    ).then(action => {
+      if (action === 'Ver Logs') {
+        vscode.commands.executeCommand('workbench.action.output.toggleOutput');
+      }
+    });
   });
 
   mcpProcess.on('exit', (code) => {
     if (code !== 0) {
       console.error(`[MCP] Process exited with code ${code}`);
+      if (!serverReady) {
+        vscode.window.showErrorMessage(
+          `Servidor MCP do Anturio terminou inesperadamente (código: ${code})`,
+          'Ver Logs'
+        ).then(action => {
+          if (action === 'Ver Logs') {
+            vscode.commands.executeCommand('workbench.action.output.toggleOutput');
+          }
+        });
+      }
     }
     mcpProcess = null;
   });

@@ -1,4 +1,4 @@
-const SERVER_URL = (process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+const SERVER_URL = (process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const API_KEY = process.env.ANTURIO_API_KEY ?? '';
 
 export interface Project {
@@ -21,6 +21,25 @@ export interface CardDescription {
   content: string;
 }
 
+export interface CardChecklistItem {
+  id: string;
+  title: string;
+  completed: boolean;
+}
+
+export interface CardChecklist {
+  id: string;
+  title: string;
+  items: CardChecklistItem[];
+}
+
+export interface CardAttachment {
+  id?: string;
+  name: string;
+  url: string;
+  type?: string;
+}
+
 export interface Card {
   id: number;
   title: string;
@@ -31,8 +50,12 @@ export interface Card {
   priority: string;
   start_date?: string;
   due_date?: string;
-  members: Array<{ email: string; name: string }>;
+  members: Array<{ email: string; name: string; icon_url?: string }>;
   labels: Array<{ text: string; color: string }>;
+  checklists?: CardChecklist[];
+  attachments?: CardAttachment[];
+  cover?: string;
+  project_id?: number;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -111,4 +134,8 @@ export interface CardComment {
 
 export async function getCardComments(cardId: number): Promise<CardComment[]> {
   return request<CardComment[]>('GET', `/api/tarefas/${cardId}/activities`);
+}
+
+export async function getCardDetails(cardId: number): Promise<Card> {
+  return request<Card>('GET', `/api/tarefas/${cardId}`);
 }

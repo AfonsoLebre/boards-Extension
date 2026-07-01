@@ -15,6 +15,22 @@ export interface CardDescription {
     title: string;
     content: string;
 }
+export interface CardChecklistItem {
+    id: string;
+    title: string;
+    completed: boolean;
+}
+export interface CardChecklist {
+    id: string;
+    title: string;
+    items: CardChecklistItem[];
+}
+export interface CardAttachment {
+    id?: string;
+    name: string;
+    url: string;
+    type?: string;
+}
 export interface Card {
     id: number;
     title: string;
@@ -28,11 +44,16 @@ export interface Card {
     members: Array<{
         email: string;
         name: string;
+        icon_url?: string;
     }>;
     labels: Array<{
         text: string;
         color: string;
     }>;
+    checklists?: CardChecklist[];
+    attachments?: CardAttachment[];
+    cover?: string;
+    project_id?: number;
 }
 export declare function listProjects(): Promise<Project[]>;
 export declare function getProjectCards(projectId: number): Promise<{
@@ -57,3 +78,4 @@ export interface CardComment {
     created_at: string;
 }
 export declare function getCardComments(cardId: number): Promise<CardComment[]>;
+export declare function getCardDetails(cardId: number): Promise<Card>;
