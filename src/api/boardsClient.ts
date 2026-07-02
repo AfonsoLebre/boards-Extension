@@ -225,6 +225,38 @@ export class BoardsClient {
     return json as Promise<T>;
   }
 
+  private async requestGetFirst<T>(paths: string[]): Promise<T> {
+    let lastError: BoardsApiError | null = null;
+    for (const path of paths) {
+      try {
+        return await this.request<T>('GET', path);
+      } catch (err) {
+        if (err instanceof BoardsApiError && err.status === 404) {
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError ?? new BoardsApiError(404, 'Nenhum endpoint disponível para este pedido.');
+  }
+
+  private async requestWriteFirst<T>(method: string, paths: string[], body?: unknown): Promise<T> {
+    let lastError: BoardsApiError | null = null;
+    for (const path of paths) {
+      try {
+        return await this.request<T>(method, path, body);
+      } catch (err) {
+        if (err instanceof BoardsApiError && err.status === 404) {
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError ?? new BoardsApiError(404, 'Nenhum endpoint disponível para este pedido.');
+  }
+
   async getProjects(): Promise<Project[]> {
     const data = await this.request<{ projects: Project[] }>('GET', '/api/v1/projects');
     return data.projects;
@@ -268,7 +300,10 @@ export class BoardsClient {
   }
 
   async updateCardRaw(cardId: number, payload: Partial<Card> & Record<string, any>): Promise<Card> {
-    return this.request<Card>('PUT', `/server-api/api/tarefas/${cardId}`, payload);
+    return this.requestWriteFirst<Card>('PUT', [
+      `/api/tarefas/${cardId}`,
+      `/server-api/api/tarefas/${cardId}`,
+    ], payload);
   }
 
   async batchUpdateCards(updates: { id: number; status?: string; order?: number }[]): Promise<void> {
@@ -284,30 +319,59 @@ export class BoardsClient {
   }
 
   async getCardDetails(cardId: number): Promise<Card> {
-    return this.request<Card>('GET', `/server-api/api/tarefas/${cardId}`);
+    try {
+      return await this.requestGetFirst<Card>([
+        `/api/tarefas/${cardId}`,
+        `/server-api/api/tarefas/${cardId}`,
+        `/api/v1/cards/${cardId}`,
+      ]);
+    } catch {
+      const projects = await this.getProjects();
+      for (const project of projects) {
+        const { cards } = await this.getProjectCards(project.id);
+        const card = cards.find((c) => c.id === cardId);
+        if (card) return card;
+      }
+      throw new BoardsApiError(404, `Card ${cardId} não encontrado`);
+    }
   }
 
   async getComments(cardId: number): Promise<Comment[]> {
     console.log('[BoardsClient] getComments for card:', cardId);
-    return this.request<Comment[]>('GET', `/server-api/api/tarefas/${cardId}/activities`);
+    return this.requestGetFirst<Comment[]>([
+      `/api/tarefas/${cardId}/activities`,
+      `/api/v1/cards/${cardId}/activities`,
+      `/server-api/api/tarefas/${cardId}/activities`,
+    ]);
   }
 
   async addComment(cardId: number, content: string, parentId?: number): Promise<Comment> {
     console.log('[BoardsClient] addComment parentId:', parentId, 'type:', typeof parentId);
-    return this.request<Comment>('POST', '/server-api/api/activities', {
+    const body = {
       task_id: cardId.toString(),
       type: 'comment',
       content,
       parent_id: parentId || null,
-    });
+    };
+    return this.requestWriteFirst<Comment>('POST', [
+      '/api/activities',
+      '/server-api/api/activities',
+    ], body);
   }
 
   async deleteComment(commentId: number): Promise<void> {
-    await this.request<void>('DELETE', `/server-api/api/activities/${commentId}`);
+    await this.requestWriteFirst<void>('DELETE', [
+      `/api/activities/${commentId}`,
+      `/server-api/api/activities/${commentId}`,
+    ]);
   }
 
   async getCurrentUser(): Promise<CurrentUser> {
-    return this.request<CurrentUser>('GET', '/api/v1/me');
+    return this.requestGetFirst<CurrentUser>([
+      '/api/v1/me',
+      '/api/me',
+      '/server-api/api/me',
+    ]);
   }
 
   async validateApiKey(): Promise<boolean> {
