@@ -85,6 +85,8 @@ export declare function updateCardDescription(cardId: number, descriptionIndex: 
     content?: string;
 }): Promise<Card>;
 export declare function deleteCardDescription(cardId: number, descriptionIndex: number): Promise<Card>;
+export declare function addCardMembers(cardId: number, emails: string[]): Promise<Card>;
+export declare function removeCardMembers(cardId: number, emails: string[]): Promise<Card>;
 export declare function fetchAttachmentBinary(url: string): Promise<{
     buffer: Buffer;
     mimeType: string;

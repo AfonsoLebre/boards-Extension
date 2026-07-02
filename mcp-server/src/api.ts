@@ -204,6 +204,73 @@ export async function deleteCardDescription(cardId: number, descriptionIndex: nu
   return updateCardRaw(cardId, { descriptions });
 }
 
+type CardMemberPayload = { email: string; name: string; icon_url?: string };
+
+export async function addCardMembers(cardId: number, emails: string[]): Promise<Card> {
+  const uniqueEmails = [...new Set(emails.map((e) => e.trim()).filter(Boolean))];
+  if (uniqueEmails.length === 0) {
+    throw new Error('Indica pelo menos um email');
+  }
+
+  const card = await getCardDetails(cardId);
+  const currentMembers = [...(card.members ?? [])];
+  const existingEmails = new Set(currentMembers.map((m) => m.email.toLowerCase()));
+
+  const cardWithProject = await ensureCardProjectId(card);
+  let participants: ProjectParticipant[] = [];
+  if (cardWithProject.project_id) {
+    participants = await getProjectParticipantsEnriched(cardWithProject.project_id);
+  }
+
+  const toAdd: CardMemberPayload[] = [];
+  const skipped: string[] = [];
+  for (const email of uniqueEmails) {
+    const lower = email.toLowerCase();
+    if (existingEmails.has(lower)) {
+      skipped.push(email);
+      continue;
+    }
+    const participant = participants.find((p) => p.email?.toLowerCase() === lower);
+    const newMember: CardMemberPayload = {
+      email,
+      name: participant?.name || email,
+    };
+    if (participant?.icon_url) {
+      newMember.icon_url = participant.icon_url;
+    }
+    toAdd.push(newMember);
+    existingEmails.add(lower);
+  }
+
+  if (toAdd.length === 0) {
+    throw new Error(
+      skipped.length === uniqueEmails.length
+        ? 'Todos os utilizadores indicados já são membros do cartão'
+        : 'Nenhum membro novo a adicionar',
+    );
+  }
+
+  return updateCardRaw(cardId, { members: [...currentMembers, ...toAdd] });
+}
+
+export async function removeCardMembers(cardId: number, emails: string[]): Promise<Card> {
+  const uniqueEmails = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  if (uniqueEmails.length === 0) {
+    throw new Error('Indica pelo menos um email');
+  }
+
+  const card = await getCardDetails(cardId);
+  const currentMembers = card.members ?? [];
+  const removeSet = new Set(uniqueEmails);
+  const newMembers = currentMembers.filter((m) => !removeSet.has(m.email.toLowerCase()));
+
+  if (newMembers.length === currentMembers.length) {
+    throw new Error('Nenhum dos emails indicados é membro do cartão');
+  }
+
+  return updateCardRaw(cardId, { members: newMembers });
+}
+
 export async function fetchAttachmentBinary(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const fullUrl = url.startsWith('http') ? url : url.startsWith('/') ? `${SERVER_URL}${url}` : url;
   const res = await fetch(fullUrl, {

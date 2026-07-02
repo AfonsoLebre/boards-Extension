@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails, addCardDescription, updateCardDescription, deleteCardDescription, getDescriptionsList } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails, addCardDescription, updateCardDescription, deleteCardDescription, getDescriptionsList, addCardMembers, removeCardMembers } from './api.js';
 import {
   addCardChecklist,
   updateCardChecklist,
@@ -117,6 +117,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           confirm: { type: 'boolean', description: 'Deve ser true após confirmação do utilizador' },
         },
         required: ['card_id', 'description_index', 'confirm'],
+      },
+    },
+    {
+      name: 'add_card_member',
+      description:
+        'Adiciona um ou mais membros ao cartão. Usa o email de um participante do projeto. Para adicionar vários de uma vez, usa add_member_emails.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          email: { type: 'string', description: 'Email do participante a adicionar (opcional se usares add_member_emails)' },
+          add_member_emails: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Lista de emails a adicionar ao cartão (opcional)',
+          },
+        },
+        required: ['card_id'],
+      },
+    },
+    {
+      name: 'remove_card_member',
+      description: 'Remove um ou mais membros do cartão.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          email: { type: 'string', description: 'Email do membro a remover (opcional se usares remove_member_emails)' },
+          remove_member_emails: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Lista de emails a remover do cartão (opcional)',
+          },
+        },
+        required: ['card_id'],
       },
     },
     {
@@ -507,6 +542,48 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       }
 
+      case 'add_card_member': {
+        const a = args as { card_id: number; email?: string; add_member_emails?: string[] };
+        const emails = [
+          ...(a.email ? [a.email] : []),
+          ...(a.add_member_emails ?? []),
+        ];
+        if (emails.length === 0) {
+          return {
+            content: [{ type: 'text', text: 'Indica email ou add_member_emails para adicionar membros ao cartão.', isError: true }],
+          };
+        }
+        const card = await addCardMembers(a.card_id, emails);
+        const memberInfo = (card.members ?? []).map((m) => `${m.name || m.email}${memberHasIcon(m) ? ' (com foto)' : ''}`).join(', ') || 'Nenhum';
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ Membro(s) adicionado(s) ao cartão **${card.title}** (ID: ${card.id}). Membros atuais: ${memberInfo}`,
+          }],
+        };
+      }
+
+      case 'remove_card_member': {
+        const a = args as { card_id: number; email?: string; remove_member_emails?: string[] };
+        const emails = [
+          ...(a.email ? [a.email] : []),
+          ...(a.remove_member_emails ?? []),
+        ];
+        if (emails.length === 0) {
+          return {
+            content: [{ type: 'text', text: 'Indica email ou remove_member_emails para remover membros do cartão.', isError: true }],
+          };
+        }
+        const card = await removeCardMembers(a.card_id, emails);
+        const memberInfo = (card.members ?? []).map((m) => `${m.name || m.email}${memberHasIcon(m) ? ' (com foto)' : ''}`).join(', ') || 'Nenhum';
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ Membro(s) removido(s) do cartão **${card.title}** (ID: ${card.id}). Membros atuais: ${memberInfo}`,
+          }],
+        };
+      }
+
       case 'add_card_checklist': {
         const a = args as { card_id: number; title: string };
         const card = await addCardChecklist(a.card_id, a.title);
@@ -634,7 +711,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         if (card.due_date) header.push(`DATA FIM: ${card.due_date}`);
 
         if (card.members && card.members.length > 0) {
-          header.push(`MEMBROS: ${card.members.map((m) => m.name || m.email).join(', ')}`);
+          header.push(`MEMBROS: ${card.members.map((m) => `${m.name || m.email}${memberHasIcon(m) ? ' (com foto)' : ''}`).join(', ')}`);
         } else {
           header.push('MEMBROS: Nenhum');
         }
