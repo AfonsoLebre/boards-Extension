@@ -12,6 +12,9 @@ This skill helps you interact with Anturio Boards - a project management tool.
 - `create_card` - Cria um novo cartão
 - `move_card` - Move um cartão para outra coluna
 - `delete_card` - Apaga um cartão (requer confirm: true)
+- `add_card_description` - Adiciona uma descrição a um cartão
+- `update_card_description` - Edita título/conteúdo de uma descrição (usa descricao_index de get_card)
+- `delete_card_description` - Apaga uma descrição (requer confirm: true; cartão deve ter >1 descrição)
 - `get_card_comments` - Apenas comentários (preferir `get_card` para conteúdo completo)
 
 ## REGRA DE OURO: mostrar SEMPRE o conteúdo COMPLETO
@@ -31,7 +34,10 @@ Quando o utilizador pedir para **ver**, **mostrar** ou **abrir** um cartão (ou 
 | "Lista projetos" | `list_projects` |
 | "Mostra os cartões do projeto X" (visão geral) | `get_project_cards` → depois `get_card` para cada cartão se pedir detalhe |
 | "Mostra o cartão Y" / "Mostra-me o Card de Testes" | `get_project_cards` ou `search_cards` só para encontrar o ID → **`get_card`** |
-| "Abre o anexo X do cartão" | **`get_card_attachment`** |
+| "Abre o anexo X do cartão" | `get_card_attachment` |
+| "Adiciona uma descrição ao cartão" | `add_card_description` |
+| "Edita a descrição 2 do cartão" | `update_card_description` com descricao_index |
+| "Apaga a descrição X" | `delete_card_description` com confirm: true |
 | "Mostra o cartão com todos os detalhes" | **`get_card`** diretamente |
 
 ### O que apresentar integralmente (de `get_card`)

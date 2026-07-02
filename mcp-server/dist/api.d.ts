@@ -65,6 +65,19 @@ export interface Card {
     cover?: string;
     project_id?: number;
 }
+export type DescriptionInput = {
+    id?: number;
+    title: string;
+    content: string;
+};
+export declare function getDescriptionsList(card: Card): DescriptionInput[];
+export declare function updateCardRaw(cardId: number, payload: Record<string, unknown>): Promise<Card>;
+export declare function addCardDescription(cardId: number, title: string, content?: string): Promise<Card>;
+export declare function updateCardDescription(cardId: number, descriptionIndex: number, updates: {
+    title?: string;
+    content?: string;
+}): Promise<Card>;
+export declare function deleteCardDescription(cardId: number, descriptionIndex: number): Promise<Card>;
 export declare function fetchAttachmentBinary(url: string): Promise<{
     buffer: Buffer;
     mimeType: string;

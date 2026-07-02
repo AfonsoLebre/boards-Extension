@@ -109,6 +109,88 @@ async function requestGetFirst<T>(paths: string[]): Promise<T> {
   throw lastError ?? new Error('Nenhum endpoint disponível para este pedido.');
 }
 
+async function requestWriteFirst<T>(method: string, paths: string[], body?: unknown): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (const path of paths) {
+    try {
+      return await request<T>(method, path, body);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      lastError = error;
+      if (!error.message.startsWith('API 404')) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Nenhum endpoint disponível para este pedido.');
+}
+
+export type DescriptionInput = { id?: number; title: string; content: string };
+
+export function getDescriptionsList(card: Card): DescriptionInput[] {
+  if (card.descriptions?.length) {
+    return card.descriptions.map((d) => ({
+      id: d.id,
+      title: d.title || 'Descrição',
+      content: d.content ?? '',
+    }));
+  }
+  if (card.description?.trim()) {
+    return [{ title: 'Descrição', content: card.description }];
+  }
+  return [];
+}
+
+export async function updateCardRaw(cardId: number, payload: Record<string, unknown>): Promise<Card> {
+  return requestWriteFirst<Card>('PUT', [
+    `/api/tarefas/${cardId}`,
+    `/server-api/api/tarefas/${cardId}`,
+  ], payload);
+}
+
+export async function addCardDescription(
+  cardId: number,
+  title: string,
+  content = '',
+): Promise<Card> {
+  const card = await getCardDetails(cardId);
+  const descriptions = getDescriptionsList(card);
+  descriptions.push({ title, content });
+  return updateCardRaw(cardId, { descriptions });
+}
+
+export async function updateCardDescription(
+  cardId: number,
+  descriptionIndex: number,
+  updates: { title?: string; content?: string },
+): Promise<Card> {
+  const card = await getCardDetails(cardId);
+  const descriptions = getDescriptionsList(card);
+  const idx = descriptionIndex - 1;
+  if (idx < 0 || idx >= descriptions.length) {
+    throw new Error(`Descrição ${descriptionIndex} não encontrada (total: ${descriptions.length})`);
+  }
+  if (updates.title !== undefined) descriptions[idx].title = updates.title;
+  if (updates.content !== undefined) descriptions[idx].content = updates.content;
+  return updateCardRaw(cardId, { descriptions });
+}
+
+export async function deleteCardDescription(cardId: number, descriptionIndex: number): Promise<Card> {
+  const card = await getCardDetails(cardId);
+  const descriptions = getDescriptionsList(card);
+  if (descriptions.length <= 1) {
+    throw new Error('Não é possível apagar a única descrição do cartão');
+  }
+  const idx = descriptionIndex - 1;
+  if (idx < 0 || idx >= descriptions.length) {
+    throw new Error(`Descrição ${descriptionIndex} não encontrada (total: ${descriptions.length})`);
+  }
+  descriptions.splice(idx, 1);
+  return updateCardRaw(cardId, { descriptions });
+}
+
 export async function fetchAttachmentBinary(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const fullUrl = url.startsWith('http') ? url : url.startsWith('/') ? `${SERVER_URL}${url}` : url;
   const res = await fetch(fullUrl, {

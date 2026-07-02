@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails, addCardDescription, updateCardDescription, deleteCardDescription, getDescriptionsList } from './api.js';
 import { parseDescriptionContent, type ToolContent } from './descriptionMedia.js';
 import { materializeAllAttachments, materializeAttachment } from './attachmentMedia.js';
 
@@ -26,24 +26,6 @@ function formatCardSummaryLine(card: {
   const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
   const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
   return `- ${priority} **${card.title}** (ID: ${card.id}) | ${card.status_label}${due}${members}`;
-}
-
-function collectDescriptions(card: {
-  description?: string;
-  descriptions?: Array<{ title: string; content: string }>;
-}): Array<{ title: string; content: string }> {
-  const result: Array<{ title: string; content: string }> = [];
-  if (card.descriptions?.length) {
-    for (const d of card.descriptions) {
-      if (d.content?.trim()) {
-        result.push({ title: d.title || 'Descrição', content: d.content });
-      }
-    }
-  }
-  if (result.length === 0 && card.description?.trim()) {
-    result.push({ title: 'Descrição', content: card.description });
-  }
-  return result;
 }
 
 function getChecklistItemMembers(item: {
@@ -103,6 +85,46 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           priority: { type: 'string', enum: ['low', 'normal', 'high', 'critical'], description: 'Filtrar por prioridade (opcional)' },
         },
         required: ['query'],
+      },
+    },
+    {
+      name: 'add_card_description',
+      description: 'Adiciona uma nova descrição a um cartão (um cartão pode ter várias). Usa get_card para ver descrições existentes e os índices.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          title: { type: 'string', description: 'Título da descrição (ex: "Descrição", "Notas técnicas")' },
+          content: { type: 'string', description: 'Conteúdo da descrição (HTML permitido, opcional)' },
+        },
+        required: ['card_id', 'title'],
+      },
+    },
+    {
+      name: 'update_card_description',
+      description: 'Edita uma descrição existente de um cartão. Usa get_card para ver o descricao_index (começa em 1).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          description_index: { type: 'number', description: 'Índice da descrição (1 = primeira)' },
+          title: { type: 'string', description: 'Novo título (opcional)' },
+          content: { type: 'string', description: 'Novo conteúdo (opcional, HTML permitido)' },
+        },
+        required: ['card_id', 'description_index'],
+      },
+    },
+    {
+      name: 'delete_card_description',
+      description: 'Apaga uma descrição de um cartão. Requer confirm: true e o cartão deve ter mais de uma descrição.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          description_index: { type: 'number', description: 'Índice da descrição a apagar (1 = primeira)' },
+          confirm: { type: 'boolean', description: 'Deve ser true após confirmação do utilizador' },
+        },
+        required: ['card_id', 'description_index', 'confirm'],
       },
     },
     {
@@ -344,6 +366,60 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       }
 
+      case 'add_card_description': {
+        const a = args as { card_id: number; title: string; content?: string };
+        const card = await addCardDescription(a.card_id, a.title, a.content ?? '');
+        const descriptions = getDescriptionsList(card);
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ Descrição adicionada: **${a.title}** (descricao_index: ${descriptions.length}) no cartão **${card.title}** (ID: ${card.id})`,
+          }],
+        };
+      }
+
+      case 'update_card_description': {
+        const a = args as { card_id: number; description_index: number; title?: string; content?: string };
+        if (a.title === undefined && a.content === undefined) {
+          return {
+            content: [{ type: 'text', text: 'Indica title e/ou content para atualizar.' }],
+            isError: true,
+          };
+        }
+        const card = await updateCardDescription(a.card_id, a.description_index, {
+          title: a.title,
+          content: a.content,
+        });
+        const descriptions = getDescriptionsList(card);
+        const updated = descriptions[a.description_index - 1];
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ Descrição ${a.description_index} atualizada: **${updated?.title ?? '?'}** no cartão **${card.title}** (ID: ${card.id})`,
+          }],
+        };
+      }
+
+      case 'delete_card_description': {
+        const a = args as { card_id: number; description_index: number; confirm: boolean };
+        if (!a.confirm) {
+          return {
+            content: [{
+              type: 'text',
+              text: '⚠️ Confirmação necessária: vais apagar uma descrição. Para confirmar, define confirm: true.',
+              isError: true,
+            }],
+          };
+        }
+        const card = await deleteCardDescription(a.card_id, a.description_index);
+        return {
+          content: [{
+            type: 'text',
+            text: `🗑️ Descrição ${a.description_index} apagada do cartão **${card.title}** (ID: ${card.id}). Restam ${getDescriptionsList(card).length} descrição(ões).`,
+          }],
+        };
+      }
+
       case 'get_card_comments': {
         const a = args as { card_id: number };
         const comments = await getCardComments(a.card_id);
@@ -396,15 +472,20 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const content: ToolContent[] = [{ type: 'text', text: header.join('\n') }];
 
         // Secção 5: DESCRIÇÃO (texto + imagens intercalados)
-        const descriptions = collectDescriptions(card);
+        const descriptions = getDescriptionsList(card);
         if (descriptions.length > 0) {
           content.push({
             type: 'text',
-            text: 'DESCRICAO:\nNOTA_IMAGENS: As imagens estão em ficheiros locais. Copia cada linha ![...](caminho) para o chat na mesma posição — não uses base64 nem descrevas o tamanho da imagem.',
+            text: 'DESCRICAO:\nNOTA_IMAGENS: As imagens estão em ficheiros locais. Copia cada linha ![...](caminho) para o chat na mesma posição — não uses base64 nem descrevas o tamanho da imagem.\nNOTA_DESCRICOES: Cada bloco tem descricao_index (1, 2, …) para editar/apagar com update_card_description ou delete_card_description.',
           });
-          for (const d of descriptions) {
-            content.push({ type: 'text', text: `[${d.title}]` });
-            content.push(...parseDescriptionContent(d.content, card.id));
+          for (let i = 0; i < descriptions.length; i++) {
+            const d = descriptions[i];
+            content.push({ type: 'text', text: `[${d.title}] (descricao_index: ${i + 1})` });
+            if (d.content.trim()) {
+              content.push(...parseDescriptionContent(d.content, card.id));
+            } else {
+              content.push({ type: 'text', text: '(vazia)' });
+            }
           }
         } else {
           content.push({ type: 'text', text: 'DESCRICAO: Nenhuma' });
