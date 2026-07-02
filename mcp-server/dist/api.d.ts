@@ -15,12 +15,20 @@ export interface CardDescription {
     title: string;
     content: string;
 }
+export interface CardChecklistItemMember {
+    email?: string;
+    name?: string;
+    icon_url?: string;
+}
 export interface CardChecklistItem {
     id: string;
     title?: string;
     text?: string;
     completed?: boolean;
     checked?: boolean;
+    assignedMembers?: CardChecklistItemMember[];
+    assigned_members?: CardChecklistItemMember[];
+    members?: CardChecklistItemMember[];
 }
 export interface CardChecklist {
     id: string;

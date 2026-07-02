@@ -8,35 +8,10 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
 import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails } from './api.js';
+import { parseDescriptionContent, type ToolContent } from './descriptionMedia.js';
 
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
-
-// Limpa HTML das descrições para texto simples
-function cleanHtmlDescription(html: string): string {
-  if (!html) return '';
-  return html
-    // Substitui parágrafos e divs por quebras de linha
-    .replace(/<\/?(p|div|br)\s*\/?>/gi, '\n')
-    // Substitui cabeçalhos
-    .replace(/<\/?h[1-6][^>]*>/gi, '\n')
-    // Substitui listas
-    .replace(/<\/?(ul|li)\s*\/?>/gi, '\n')
-    // Remove todas as tags HTML
-    .replace(/<[^>]+>/g, '')
-    // Remove encoded characters
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    // Remove base64 images
-    .replace(/data:image\/[^;]+;base64,[^\s]*/gi, '[imagem]')
-    // Limpa múltiplas quebras de linha
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 function formatCardSummaryLine(card: {
   id: number;
@@ -68,6 +43,24 @@ function collectDescriptions(card: {
     result.push({ title: 'Descrição', content: card.description });
   }
   return result;
+}
+
+function getChecklistItemMembers(item: {
+  assignedMembers?: Array<{ name?: string; email?: string }>;
+  assigned_members?: Array<{ name?: string; email?: string }>;
+  members?: Array<{ name?: string; email?: string }>;
+}): Array<{ name?: string; email?: string }> {
+  return item.assignedMembers ?? item.assigned_members ?? item.members ?? [];
+}
+
+function formatChecklistItemMembers(item: {
+  assignedMembers?: Array<{ name?: string; email?: string }>;
+  assigned_members?: Array<{ name?: string; email?: string }>;
+  members?: Array<{ name?: string; email?: string }>;
+}): string {
+  const members = getChecklistItemMembers(item);
+  if (members.length === 0) return 'Membros: Nenhum';
+  return `Membros: ${members.map((m) => m.name || m.email || '?').join(', ')}`;
 }
 
 const LIST_CARDS_HEADER =
@@ -165,7 +158,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'get_card',
       description:
-        'OBRIGATÓRIO para mostrar um cartão ao utilizador. Devolve TODO o conteúdo: título, descrições completas, checklists, anexos, membros, etiquetas, datas, prioridade, coluna, comentários e histórico. A AI deve apresentar este output integralmente ao utilizador — sem resumir, truncar ou omitir conteúdo.',
+        'OBRIGATÓRIO para mostrar um cartão ao utilizador. Imagens nas descrições são guardadas em ficheiros locais com caminhos curtos (![...](caminho)) intercalados no texto — NUNCA base64. Reproduz cada linha ![...](caminho) na posição correta da descrição. Devolve também blocos image para visualização. Conteúdo completo: descrições, checklists, anexos, comentários, histórico.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -358,112 +351,117 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           // Comentários são opcionais se o endpoint de atividades não estiver disponível.
         }
 
-        const sections: string[] = [];
+        const header: string[] = [];
 
         // Secção 1: Identidade
-        sections.push(`CARTAO: ${card.title} (ID: ${card.id})`);
+        header.push(`CARTAO: ${card.title} (ID: ${card.id})`);
 
-        // Secção 2: Estado Básico (sempre presente, mesmo que vazio)
+        // Secção 2: Estado Básico
         const priorityMap: Record<string, string> = { low: 'Baixa', normal: 'Normal', high: 'Alta', critical: 'Critica' };
-        sections.push(`COLUNA: ${card.status_label || 'N/A'}`);
-        sections.push(`PRIORIDADE: ${priorityMap[card.priority] || card.priority}`);
+        header.push(`COLUNA: ${card.status_label || 'N/A'}`);
+        header.push(`PRIORIDADE: ${priorityMap[card.priority] || card.priority}`);
 
-        // Secção 3: Datas
-        if (card.start_date) sections.push(`DATA INICIO: ${card.start_date}`);
-        if (card.due_date) sections.push(`DATA FIM: ${card.due_date}`);
+        if (card.start_date) header.push(`DATA INICIO: ${card.start_date}`);
+        if (card.due_date) header.push(`DATA FIM: ${card.due_date}`);
 
-        // Secção 4: Membros e Etiquetas
         if (card.members && card.members.length > 0) {
-          sections.push(`MEMBROS: ${card.members.map((m) => m.name || m.email).join(', ')}`);
+          header.push(`MEMBROS: ${card.members.map((m) => m.name || m.email).join(', ')}`);
         } else {
-          sections.push('MEMBROS: Nenhum');
+          header.push('MEMBROS: Nenhum');
         }
 
         if (card.labels && card.labels.length > 0) {
-          sections.push(`ETIQUETAS: ${card.labels.map((l) => l.text).join(', ')}`);
+          header.push(`ETIQUETAS: ${card.labels.map((l) => l.text).join(', ')}`);
         } else {
-          sections.push('ETIQUETAS: Nenhuma');
+          header.push('ETIQUETAS: Nenhuma');
         }
 
-        sections.push('---');
+        header.push('---');
 
-        // Secção 5: DESCRIÇÃO
+        const content: ToolContent[] = [{ type: 'text', text: header.join('\n') }];
+
+        // Secção 5: DESCRIÇÃO (texto + imagens intercalados)
         const descriptions = collectDescriptions(card);
         if (descriptions.length > 0) {
-          sections.push('DESCRICAO:');
+          content.push({
+            type: 'text',
+            text: 'DESCRICAO:\nNOTA_IMAGENS: As imagens estão em ficheiros locais. Copia cada linha ![...](caminho) para o chat na mesma posição — não uses base64 nem descrevas o tamanho da imagem.',
+          });
           for (const d of descriptions) {
-            sections.push(`[${d.title}]`);
-            sections.push(cleanHtmlDescription(d.content));
+            content.push({ type: 'text', text: `[${d.title}]` });
+            content.push(...parseDescriptionContent(d.content, card.id));
           }
         } else {
-          sections.push('DESCRICAO: Nenhuma');
+          content.push({ type: 'text', text: 'DESCRICAO: Nenhuma' });
         }
-        sections.push('---');
 
-        // Secção 6: CHECKLISTS (bem explícita)
+        const footer: string[] = ['---'];
+
+        // Secção 6: CHECKLISTS
         if (card.checklists && card.checklists.length > 0) {
-          sections.push('CHECKLISTS:');
+          footer.push('CHECKLISTS:');
           for (const cl of card.checklists) {
             const items = cl.items || [];
             const done = items.filter((i) => i && (i.completed || i.checked)).length;
-            sections.push(`CHECKLIST: ${cl.title || 'Sem titulo'} (${done}/${items.length})`);
+            footer.push(`CHECKLIST: ${cl.title || 'Sem titulo'} (${done}/${items.length})`);
             if (items.length === 0) {
-              sections.push('  - (vazia)');
+              footer.push('  - (vazia)');
             } else {
               for (const item of items) {
                 if (!item) continue;
                 const txt = item.text || item.title;
                 const isDone = item.completed || item.checked;
                 if (txt) {
-                  sections.push(`  - [${isDone ? 'X' : ' '}] ${txt}`);
+                  footer.push(`  - [${isDone ? 'X' : ' '}] ${txt} | ${formatChecklistItemMembers(item)}`);
                 }
               }
             }
           }
         } else {
-          sections.push('CHECKLISTS: Nenhuma');
+          footer.push('CHECKLISTS: Nenhuma');
         }
-        sections.push('---');
+        footer.push('---');
 
         // Secção 7: Anexos
         if (card.attachments && card.attachments.length > 0) {
-          sections.push('ANEXOS:');
+          footer.push('ANEXOS:');
           for (const att of card.attachments) {
             if (att && att.name) {
-              sections.push(`  - ${att.name}`);
+              footer.push(`  - ${att.name}`);
             }
           }
         } else {
-          sections.push('ANEXOS: Nenhum');
+          footer.push('ANEXOS: Nenhum');
         }
-        sections.push('---');
+        footer.push('---');
 
         // Secção 8: Comentários
         const realComments = comments.filter((c) => c.type === 'comment');
         if (realComments.length > 0) {
-          sections.push('COMENTARIOS:');
+          footer.push('COMENTARIOS:');
           for (const c of realComments) {
             const dateStr = new Date(c.created_at).toLocaleString('pt-PT');
-            sections.push(`  ${c.user_name} (${dateStr}): ${c.content}`);
+            footer.push(`  ${c.user_name} (${dateStr}): ${c.content}`);
           }
         } else {
-          sections.push('COMENTARIOS: Nenhum');
+          footer.push('COMENTARIOS: Nenhum');
         }
-        sections.push('---');
+        footer.push('---');
 
         // Secção 9: Histórico
         const history = comments.filter((c) => c.type !== 'comment');
         if (history.length > 0) {
-          sections.push('HISTORICO:');
+          footer.push('HISTORICO:');
           for (const h of history) {
             const dateStr = new Date(h.created_at).toLocaleString('pt-PT');
-            sections.push(`  ${h.type} por ${h.user_name} em ${dateStr}`);
+            footer.push(`  ${h.type} por ${h.user_name} em ${dateStr}`);
           }
         } else {
-          sections.push('HISTORICO: Nenhum');
+          footer.push('HISTORICO: Nenhum');
         }
 
-        return { content: [{ type: 'text', text: sections.join('\n') }] };
+        content.push({ type: 'text', text: footer.join('\n') });
+        return { content };
       }
 
       default:

@@ -273,6 +273,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 }
 
+function getMcpEnv(apiKey: string, serverUrl: string): Record<string, string> {
+  const env: Record<string, string> = {
+    ANTURIO_API_KEY: apiKey,
+    ANTURIO_SERVER_URL: serverUrl,
+    TRANSPORT: 'stdio',
+  };
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (workspaceFolders?.[0]) {
+    const workspaceRoot = workspaceFolders[0].uri.fsPath;
+    env.ANTURIO_WORKSPACE_ROOT = workspaceRoot;
+    env.ANTURIO_IMAGE_CACHE_DIR = path.join(workspaceRoot, '.anturio', 'card-images');
+  }
+  return env;
+}
+
 async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpServerPath: string; mcpEntry: object } | null> {
   const config = vscode.workspace.getConfiguration('anturio');
   const apiKey = config.get<string>('apiKey', '');
@@ -298,11 +313,7 @@ async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpSe
   const mcpEntry = {
     command: 'node',
     args: [mcpServerPath],
-    env: {
-      ANTURIO_API_KEY: apiKey,
-      ANTURIO_SERVER_URL: serverUrl,
-      TRANSPORT: 'stdio',
-    },
+    env: getMcpEnv(apiKey, serverUrl),
   };
 
   // Escreve na config global do Claude Code
@@ -339,7 +350,7 @@ async function setupMcpConfig(context: vscode.ExtensionContext): Promise<{ mcpSe
     console.log('[Anturio] MCP config written to:', projectClaude);
   }
 
-  return { mcpServerPath, mcpEntry: { command: 'node', args: [mcpServerPath], env: { ANTURIO_API_KEY: apiKey, ANTURIO_SERVER_URL: serverUrl } } };
+  return { mcpServerPath, mcpEntry: { command: 'node', args: [mcpServerPath], env: getMcpEnv(apiKey, serverUrl) } };
 }
 
 let mcpProcess: ChildProcess | null = null;
@@ -397,9 +408,7 @@ function startMcpServer(context: vscode.ExtensionContext): void {
   mcpProcess = spawn('node', [mcpServerPath], {
     env: {
       ...process.env,
-      ANTURIO_API_KEY: apiKey,
-      ANTURIO_SERVER_URL: serverUrl,
-      TRANSPORT: 'stdio',
+      ...getMcpEnv(apiKey, serverUrl),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

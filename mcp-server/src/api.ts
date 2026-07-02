@@ -21,12 +21,21 @@ export interface CardDescription {
   content: string;
 }
 
+export interface CardChecklistItemMember {
+  email?: string;
+  name?: string;
+  icon_url?: string;
+}
+
 export interface CardChecklistItem {
   id: string;
   title?: string;
   text?: string;
   completed?: boolean;
   checked?: boolean;
+  assignedMembers?: CardChecklistItemMember[];
+  assigned_members?: CardChecklistItemMember[];
+  members?: CardChecklistItemMember[];
 }
 
 export interface CardChecklist {
@@ -164,9 +173,9 @@ export async function getCardComments(cardId: number): Promise<CardComment[]> {
 export async function getCardDetails(cardId: number): Promise<Card> {
   try {
     return await requestGetFirst<Card>([
-      `/api/v1/cards/${cardId}`,
       `/api/tarefas/${cardId}`,
       `/server-api/api/tarefas/${cardId}`,
+      `/api/v1/cards/${cardId}`,
     ]);
   } catch {
     const projects = await listProjects();

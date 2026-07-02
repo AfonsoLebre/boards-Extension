@@ -72,9 +72,9 @@ export async function getCardComments(cardId) {
 export async function getCardDetails(cardId) {
     try {
         return await requestGetFirst([
-            `/api/v1/cards/${cardId}`,
             `/api/tarefas/${cardId}`,
             `/server-api/api/tarefas/${cardId}`,
+            `/api/v1/cards/${cardId}`,
         ]);
     }
     catch {

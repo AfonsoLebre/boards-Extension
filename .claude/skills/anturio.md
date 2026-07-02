@@ -34,8 +34,9 @@ Quando o utilizador pedir para **ver**, **mostrar** ou **abrir** um cartão (ou 
 
 ### O que apresentar integralmente (de `get_card`)
 
-- Todas as descrições completas (mesmo que longas)
-- Todos os itens de checklists com estado (concluído / pendente)
+- Todas as descrições completas, com imagens em **caminhos de ficheiro curtos** (`![...](.anturio/card-images/...)` ou `file:///...`) intercaladas no texto
+- **Copia cada linha `![...](caminho)` na posição correta** — nunca uses base64, nunca digas "imagem embutida de X KB", nunca remetas para ficheiros de ferramenta MCP
+- Todos os itens de checklists com estado (concluído / pendente) e membros atribuídos a cada item
 - Todos os anexos
 - Todas as etiquetas e membros
 - Todos os comentários
