@@ -1,6 +1,16 @@
 const SERVER_URL = (process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const API_KEY = process.env.ANTURIO_API_KEY ?? '';
 
+export function resolveServerUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+    return path;
+  }
+  if (path.startsWith('/')) {
+    return `${SERVER_URL}${path}`;
+  }
+  return path;
+}
+
 export interface Project {
   id: number;
   title: string;
@@ -25,10 +35,13 @@ export interface CardChecklistItemMember {
   email?: string;
   name?: string;
   icon_url?: string;
+  avatar?: string;
+  icon?: string;
+  user_icon?: string;
 }
 
 export interface CardChecklistItem {
-  id: string;
+  id?: string;
   title?: string;
   text?: string;
   completed?: boolean;
@@ -39,7 +52,7 @@ export interface CardChecklistItem {
 }
 
 export interface CardChecklist {
-  id: string;
+  id?: string;
   title: string;
   items: CardChecklistItem[];
 }
@@ -61,7 +74,7 @@ export interface Card {
   priority: string;
   start_date?: string;
   due_date?: string;
-  members: Array<{ email: string; name: string; icon_url?: string }>;
+  members: Array<{ email: string; name: string; icon_url?: string; avatar?: string; icon?: string; user_icon?: string }>;
   labels: Array<{ text: string; color: string }>;
   checklists?: CardChecklist[];
   attachments?: CardAttachment[];
@@ -213,12 +226,94 @@ export async function listProjects(): Promise<Project[]> {
   return data.projects;
 }
 
-export async function getProjectCards(projectId: number): Promise<{ columns: Column[]; cards: Card[] }> {
-  const data = await request<{ project_id: number; columns: Column[]; cards: Card[] }>(
+export interface ProjectParticipant {
+  email: string;
+  name?: string;
+  role?: string;
+  permission?: string;
+  status?: number;
+  icon_url?: string;
+  avatar?: string;
+  icon?: string;
+  user_icon?: string;
+}
+
+export async function getProjectCards(projectId: number): Promise<{
+  columns: Column[];
+  cards: Card[];
+  participants?: ProjectParticipant[];
+}> {
+  const data = await request<{
+    project_id: number;
+    columns: Column[];
+    cards: Card[];
+    participants?: ProjectParticipant[];
+  }>(
     'GET',
     `/api/v1/projects/${projectId}/cards`,
   );
-  return { columns: data.columns, cards: data.cards };
+  return { columns: data.columns, cards: data.cards, participants: data.participants };
+}
+
+function parseTrabalhoParticipants(project: {
+  EmCarrege?: string;
+  manager_name?: string;
+  manager_icon?: string;
+  Participantes?: ProjectParticipant[];
+}): ProjectParticipant[] {
+  const participants = project.Participantes ?? [];
+  const managerEmail = project.EmCarrege;
+  const list: ProjectParticipant[] = [];
+
+  if (managerEmail) {
+    list.push({
+      email: managerEmail,
+      name: project.manager_name || '',
+      icon_url: project.manager_icon,
+      role: 'manager',
+      permission: 'write',
+      status: 1,
+    });
+  }
+
+  for (const participant of participants) {
+    if (!participant.email) continue;
+    if (managerEmail && participant.email.toLowerCase() === managerEmail.toLowerCase()) continue;
+    list.push(participant);
+  }
+
+  return list;
+}
+
+/** Participantes do projeto com icon_url — igual ao DetalhesTrabDev.jsx */
+export async function getProjectParticipantsEnriched(projectId: number): Promise<ProjectParticipant[]> {
+  try {
+    const { participants } = await getProjectCards(projectId);
+    if (participants?.length) return participants;
+  } catch {
+    // fallback para endpoint legacy
+  }
+
+  const project = await requestGetFirst<{
+    EmCarrege?: string;
+    manager_name?: string;
+    manager_icon?: string;
+    Participantes?: ProjectParticipant[];
+  }>([
+    `/api/trabalhos/${projectId}`,
+    `/server-api/api/trabalhos/${projectId}`,
+  ]);
+
+  return parseTrabalhoParticipants(project);
+}
+
+function normalizeCard(card: Card & { trabalhoId?: number }): Card {
+  return {
+    ...card,
+    members: card.members ?? [],
+    checklists: card.checklists ?? [],
+    project_id: card.project_id ?? card.trabalhoId,
+  };
 }
 
 export async function createCard(
@@ -269,19 +364,33 @@ export async function getCardComments(cardId: number): Promise<CardComment[]> {
   ]);
 }
 
+export async function ensureCardProjectId(card: Card): Promise<Card> {
+  if (card.project_id) return card;
+
+  const projects = await listProjects();
+  for (const project of projects) {
+    const { cards } = await getProjectCards(project.id);
+    if (cards.some((c) => c.id === card.id)) {
+      return { ...card, project_id: project.id };
+    }
+  }
+  return card;
+}
+
 export async function getCardDetails(cardId: number): Promise<Card> {
   try {
-    return await requestGetFirst<Card>([
+    const card = normalizeCard(await requestGetFirst<Card & { trabalhoId?: number }>([
       `/api/tarefas/${cardId}`,
       `/server-api/api/tarefas/${cardId}`,
       `/api/v1/cards/${cardId}`,
-    ]);
+    ]));
+    return ensureCardProjectId(card);
   } catch {
     const projects = await listProjects();
     for (const project of projects) {
       const { cards } = await getProjectCards(project.id);
       const card = cards.find((c) => c.id === cardId);
-      if (card) return card;
+      if (card) return { ...card, project_id: card.project_id ?? project.id };
     }
     throw new Error(`Card ${cardId} não encontrado.`);
   }

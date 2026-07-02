@@ -1,3 +1,4 @@
+export declare function resolveServerUrl(path: string): string;
 export interface Project {
     id: number;
     title: string;
@@ -19,9 +20,12 @@ export interface CardChecklistItemMember {
     email?: string;
     name?: string;
     icon_url?: string;
+    avatar?: string;
+    icon?: string;
+    user_icon?: string;
 }
 export interface CardChecklistItem {
-    id: string;
+    id?: string;
     title?: string;
     text?: string;
     completed?: boolean;
@@ -31,7 +35,7 @@ export interface CardChecklistItem {
     members?: CardChecklistItemMember[];
 }
 export interface CardChecklist {
-    id: string;
+    id?: string;
     title: string;
     items: CardChecklistItem[];
 }
@@ -55,6 +59,9 @@ export interface Card {
         email: string;
         name: string;
         icon_url?: string;
+        avatar?: string;
+        icon?: string;
+        user_icon?: string;
     }>;
     labels: Array<{
         text: string;
@@ -83,10 +90,24 @@ export declare function fetchAttachmentBinary(url: string): Promise<{
     mimeType: string;
 }>;
 export declare function listProjects(): Promise<Project[]>;
+export interface ProjectParticipant {
+    email: string;
+    name?: string;
+    role?: string;
+    permission?: string;
+    status?: number;
+    icon_url?: string;
+    avatar?: string;
+    icon?: string;
+    user_icon?: string;
+}
 export declare function getProjectCards(projectId: number): Promise<{
     columns: Column[];
     cards: Card[];
+    participants?: ProjectParticipant[];
 }>;
+/** Participantes do projeto com icon_url — igual ao DetalhesTrabDev.jsx */
+export declare function getProjectParticipantsEnriched(projectId: number): Promise<ProjectParticipant[]>;
 export declare function createCard(projectId: number, payload: {
     title: string;
     description?: string;
@@ -105,4 +126,5 @@ export interface CardComment {
     created_at: string;
 }
 export declare function getCardComments(cardId: number): Promise<CardComment[]>;
+export declare function ensureCardProjectId(card: Card): Promise<Card>;
 export declare function getCardDetails(cardId: number): Promise<Card>;

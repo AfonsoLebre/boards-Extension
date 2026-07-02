@@ -171,6 +171,18 @@ export class BoardsClient {
     return this.serverUrl.length > 0 && this.apiKey.length > 0;
   }
 
+  getServerUrl(): string {
+    return this.serverUrl;
+  }
+
+  resolveMediaUrl(url?: string): string {
+    if (!url) return '';
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+      return url;
+    }
+    return `${this.serverUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+
   async getCurrentUserEmail(): Promise<string | null> {
     if (!this._currentUser) {
       try {
@@ -266,6 +278,61 @@ export class BoardsClient {
     return this.request<ProjectCardsResponse>('GET', `/api/v1/projects/${projectId}/cards`);
   }
 
+  private parseTrabalhoParticipants(project: {
+    EmCarrege?: string;
+    manager_name?: string;
+    manager_icon?: string;
+    Participantes?: ProjectParticipant[];
+  }): ProjectParticipant[] {
+    const participants = project.Participantes ?? [];
+    const managerEmail = project.EmCarrege;
+    const list: ProjectParticipant[] = [];
+
+    if (managerEmail) {
+      list.push({
+        email: managerEmail,
+        name: project.manager_name || '',
+        icon_url: project.manager_icon,
+        role: 'manager',
+        permission: 'write',
+        status: 1,
+      });
+    }
+
+    for (const participant of participants) {
+      if (!participant.email) continue;
+      if (managerEmail && participant.email.toLowerCase() === managerEmail.toLowerCase()) continue;
+      list.push(participant);
+    }
+
+    return list;
+  }
+
+  async getProjectParticipantsEnriched(projectId: number): Promise<ProjectParticipant[]> {
+    try {
+      const data = await this.getProjectCards(projectId);
+      if (data.participants?.length) return data.participants;
+    } catch (err) {
+      console.log('[BoardsClient] v1 participants failed, trying trabalhos:', err);
+    }
+
+    try {
+      const project = await this.requestGetFirst<{
+        EmCarrege?: string;
+        manager_name?: string;
+        manager_icon?: string;
+        Participantes?: ProjectParticipant[];
+      }>([
+        `/api/trabalhos/${projectId}`,
+        `/server-api/api/trabalhos/${projectId}`,
+      ]);
+      return this.parseTrabalhoParticipants(project);
+    } catch (err) {
+      console.log('[BoardsClient] trabalhos participants failed:', err);
+      return [];
+    }
+  }
+
   async getProjectLabels(projectId: number): Promise<{ text: string; color: string }[]> {
     try {
       // Get labels from global_labels endpoint
@@ -320,20 +387,43 @@ export class BoardsClient {
 
   async getCardDetails(cardId: number): Promise<Card> {
     try {
-      return await this.requestGetFirst<Card>([
+      const card = this.normalizeCard(await this.requestGetFirst<Card & { trabalhoId?: number }>([
         `/api/tarefas/${cardId}`,
         `/server-api/api/tarefas/${cardId}`,
         `/api/v1/cards/${cardId}`,
-      ]);
+      ]));
+      return this.ensureCardProjectId(card);
     } catch {
       const projects = await this.getProjects();
       for (const project of projects) {
         const { cards } = await this.getProjectCards(project.id);
         const card = cards.find((c) => c.id === cardId);
-        if (card) return card;
+        if (card) return this.normalizeCard({ ...card, project_id: card.project_id ?? project.id });
       }
       throw new BoardsApiError(404, `Card ${cardId} não encontrado`);
     }
+  }
+
+  private normalizeCard(card: Card & { trabalhoId?: number }): Card {
+    return {
+      ...card,
+      members: card.members ?? [],
+      checklists: card.checklists ?? [],
+      project_id: card.project_id ?? card.trabalhoId,
+    };
+  }
+
+  private async ensureCardProjectId(card: Card): Promise<Card> {
+    if (card.project_id) return card;
+
+    const projects = await this.getProjects();
+    for (const project of projects) {
+      const { cards } = await this.getProjectCards(project.id);
+      if (cards.some((c) => c.id === card.id)) {
+        return { ...card, project_id: project.id };
+      }
+    }
+    return card;
   }
 
   async getComments(cardId: number): Promise<Comment[]> {

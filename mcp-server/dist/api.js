@@ -1,5 +1,14 @@
 const SERVER_URL = (process.env.ANTURIO_SERVER_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const API_KEY = process.env.ANTURIO_API_KEY ?? '';
+export function resolveServerUrl(path) {
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+        return path;
+    }
+    if (path.startsWith('/')) {
+        return `${SERVER_URL}${path}`;
+    }
+    return path;
+}
 async function request(method, path, body) {
     if (!API_KEY)
         throw new Error('ANTURIO_API_KEY não definida. Configura a variável de ambiente.');
@@ -124,7 +133,54 @@ export async function listProjects() {
 }
 export async function getProjectCards(projectId) {
     const data = await request('GET', `/api/v1/projects/${projectId}/cards`);
-    return { columns: data.columns, cards: data.cards };
+    return { columns: data.columns, cards: data.cards, participants: data.participants };
+}
+function parseTrabalhoParticipants(project) {
+    const participants = project.Participantes ?? [];
+    const managerEmail = project.EmCarrege;
+    const list = [];
+    if (managerEmail) {
+        list.push({
+            email: managerEmail,
+            name: project.manager_name || '',
+            icon_url: project.manager_icon,
+            role: 'manager',
+            permission: 'write',
+            status: 1,
+        });
+    }
+    for (const participant of participants) {
+        if (!participant.email)
+            continue;
+        if (managerEmail && participant.email.toLowerCase() === managerEmail.toLowerCase())
+            continue;
+        list.push(participant);
+    }
+    return list;
+}
+/** Participantes do projeto com icon_url — igual ao DetalhesTrabDev.jsx */
+export async function getProjectParticipantsEnriched(projectId) {
+    try {
+        const { participants } = await getProjectCards(projectId);
+        if (participants?.length)
+            return participants;
+    }
+    catch {
+        // fallback para endpoint legacy
+    }
+    const project = await requestGetFirst([
+        `/api/trabalhos/${projectId}`,
+        `/server-api/api/trabalhos/${projectId}`,
+    ]);
+    return parseTrabalhoParticipants(project);
+}
+function normalizeCard(card) {
+    return {
+        ...card,
+        members: card.members ?? [],
+        checklists: card.checklists ?? [],
+        project_id: card.project_id ?? card.trabalhoId,
+    };
 }
 export async function createCard(projectId, payload) {
     // O endpoint de criação usa `status` para a coluna (no modelo, card.status === column.id).
@@ -152,13 +208,26 @@ export async function getCardComments(cardId) {
         `/server-api/api/tarefas/${cardId}/activities`,
     ]);
 }
+export async function ensureCardProjectId(card) {
+    if (card.project_id)
+        return card;
+    const projects = await listProjects();
+    for (const project of projects) {
+        const { cards } = await getProjectCards(project.id);
+        if (cards.some((c) => c.id === card.id)) {
+            return { ...card, project_id: project.id };
+        }
+    }
+    return card;
+}
 export async function getCardDetails(cardId) {
     try {
-        return await requestGetFirst([
+        const card = normalizeCard(await requestGetFirst([
             `/api/tarefas/${cardId}`,
             `/server-api/api/tarefas/${cardId}`,
             `/api/v1/cards/${cardId}`,
-        ]);
+        ]));
+        return ensureCardProjectId(card);
     }
     catch {
         const projects = await listProjects();
@@ -166,7 +235,7 @@ export async function getCardDetails(cardId) {
             const { cards } = await getProjectCards(project.id);
             const card = cards.find((c) => c.id === cardId);
             if (card)
-                return card;
+                return { ...card, project_id: card.project_id ?? project.id };
         }
         throw new Error(`Card ${cardId} não encontrado.`);
     }

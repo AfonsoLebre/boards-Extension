@@ -8,6 +8,16 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
 import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails, addCardDescription, updateCardDescription, deleteCardDescription, getDescriptionsList } from './api.js';
+import {
+  addCardChecklist,
+  updateCardChecklist,
+  deleteCardChecklist,
+  addChecklistItem,
+  updateChecklistItem,
+  deleteChecklistItem,
+  getChecklistsList,
+  memberHasIcon,
+} from './checklistApi.js';
 import { parseDescriptionContent, type ToolContent } from './descriptionMedia.js';
 import { materializeAllAttachments, materializeAttachment } from './attachmentMedia.js';
 
@@ -26,24 +36,6 @@ function formatCardSummaryLine(card: {
   const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
   const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
   return `- ${priority} **${card.title}** (ID: ${card.id}) | ${card.status_label}${due}${members}`;
-}
-
-function getChecklistItemMembers(item: {
-  assignedMembers?: Array<{ name?: string; email?: string }>;
-  assigned_members?: Array<{ name?: string; email?: string }>;
-  members?: Array<{ name?: string; email?: string }>;
-}): Array<{ name?: string; email?: string }> {
-  return item.assignedMembers ?? item.assigned_members ?? item.members ?? [];
-}
-
-function formatChecklistItemMembers(item: {
-  assignedMembers?: Array<{ name?: string; email?: string }>;
-  assigned_members?: Array<{ name?: string; email?: string }>;
-  members?: Array<{ name?: string; email?: string }>;
-}): string {
-  const members = getChecklistItemMembers(item);
-  if (members.length === 0) return 'Membros: Nenhum';
-  return `Membros: ${members.map((m) => m.name || m.email || '?').join(', ')}`;
 }
 
 const LIST_CARDS_HEADER =
@@ -125,6 +117,101 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           confirm: { type: 'boolean', description: 'Deve ser true após confirmação do utilizador' },
         },
         required: ['card_id', 'description_index', 'confirm'],
+      },
+    },
+    {
+      name: 'add_card_checklist',
+      description: 'Adiciona uma checklist vazia a um cartão. Usa get_card para ver checklist_index existentes.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          title: { type: 'string', description: 'Título da checklist' },
+        },
+        required: ['card_id', 'title'],
+      },
+    },
+    {
+      name: 'update_card_checklist',
+      description: 'Renomeia uma checklist de um cartão.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          checklist_index: { type: 'number', description: 'Índice da checklist (1 = primeira)' },
+          title: { type: 'string', description: 'Novo título' },
+        },
+        required: ['card_id', 'checklist_index', 'title'],
+      },
+    },
+    {
+      name: 'delete_card_checklist',
+      description: 'Apaga uma checklist inteira de um cartão. Requer confirm: true.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          checklist_index: { type: 'number', description: 'Índice da checklist (1 = primeira)' },
+          confirm: { type: 'boolean', description: 'Deve ser true após confirmação do utilizador' },
+        },
+        required: ['card_id', 'checklist_index', 'confirm'],
+      },
+    },
+    {
+      name: 'add_checklist_item',
+      description: 'Adiciona um item a uma checklist.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          checklist_index: { type: 'number', description: 'Índice da checklist (1 = primeira)' },
+          text: { type: 'string', description: 'Texto do item' },
+        },
+        required: ['card_id', 'checklist_index', 'text'],
+      },
+    },
+    {
+      name: 'update_checklist_item',
+      description: 'Edita um item de checklist: texto, estado concluído e/ou membros atribuídos. Para adicionar um membro sem remover os existentes, usa add_member_emails.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          checklist_index: { type: 'number', description: 'Índice da checklist (1 = primeira)' },
+          item_index: { type: 'number', description: 'Índice do item (1 = primeiro)' },
+          text: { type: 'string', description: 'Novo texto (opcional)' },
+          completed: { type: 'boolean', description: 'Marcar como concluído/pendente (opcional)' },
+          member_emails: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Substitui todos os membros do item por esta lista (opcional; [] para remover todos)',
+          },
+          add_member_emails: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Adiciona membros ao item sem remover os existentes (preferir para adicionar um membro)',
+          },
+          remove_member_emails: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Remove membros específicos do item (opcional)',
+          },
+        },
+        required: ['card_id', 'checklist_index', 'item_index'],
+      },
+    },
+    {
+      name: 'delete_checklist_item',
+      description: 'Apaga um item de uma checklist. Requer confirm: true.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          checklist_index: { type: 'number', description: 'Índice da checklist (1 = primeira)' },
+          item_index: { type: 'number', description: 'Índice do item (1 = primeiro)' },
+          confirm: { type: 'boolean', description: 'Deve ser true após confirmação do utilizador' },
+        },
+        required: ['card_id', 'checklist_index', 'item_index', 'confirm'],
       },
     },
     {
@@ -420,6 +507,97 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       }
 
+      case 'add_card_checklist': {
+        const a = args as { card_id: number; title: string };
+        const card = await addCardChecklist(a.card_id, a.title);
+        const count = getChecklistsList(card).length;
+        return {
+          content: [{ type: 'text', text: `✅ Checklist **${a.title}** adicionada (checklist_index: ${count}) ao cartão **${card.title}** (ID: ${card.id})` }],
+        };
+      }
+
+      case 'update_card_checklist': {
+        const a = args as { card_id: number; checklist_index: number; title: string };
+        const card = await updateCardChecklist(a.card_id, a.checklist_index, a.title);
+        return {
+          content: [{ type: 'text', text: `✅ Checklist ${a.checklist_index} renomeada para **${a.title}** no cartão **${card.title}** (ID: ${card.id})` }],
+        };
+      }
+
+      case 'delete_card_checklist': {
+        const a = args as { card_id: number; checklist_index: number; confirm: boolean };
+        if (!a.confirm) {
+          return {
+            content: [{ type: 'text', text: '⚠️ Confirmação necessária: vais apagar uma checklist. Para confirmar, define confirm: true.', isError: true }],
+          };
+        }
+        const card = await deleteCardChecklist(a.card_id, a.checklist_index);
+        return {
+          content: [{ type: 'text', text: `🗑️ Checklist ${a.checklist_index} apagada do cartão **${card.title}** (ID: ${card.id}). Restam ${getChecklistsList(card).length} checklist(s).` }],
+        };
+      }
+
+      case 'add_checklist_item': {
+        const a = args as { card_id: number; checklist_index: number; text: string };
+        const card = await addChecklistItem(a.card_id, a.checklist_index, a.text);
+        const cl = getChecklistsList(card)[a.checklist_index - 1];
+        return {
+          content: [{ type: 'text', text: `✅ Item adicionado à checklist ${a.checklist_index}: **${a.text}** (item_index: ${cl?.items.length ?? '?'}) no cartão **${card.title}**` }],
+        };
+      }
+
+      case 'update_checklist_item': {
+        const a = args as {
+          card_id: number;
+          checklist_index: number;
+          item_index: number;
+          text?: string;
+          completed?: boolean;
+          member_emails?: string[];
+          add_member_emails?: string[];
+          remove_member_emails?: string[];
+        };
+        if (
+          a.text === undefined
+          && a.completed === undefined
+          && a.member_emails === undefined
+          && !a.add_member_emails?.length
+          && !a.remove_member_emails?.length
+        ) {
+          return {
+            content: [{ type: 'text', text: 'Indica text, completed, member_emails, add_member_emails e/ou remove_member_emails para atualizar.', isError: true }],
+          };
+        }
+        const card = await updateChecklistItem(a.card_id, a.checklist_index, a.item_index, {
+          text: a.text,
+          completed: a.completed,
+          member_emails: a.member_emails,
+          add_member_emails: a.add_member_emails,
+          remove_member_emails: a.remove_member_emails,
+        });
+        const item = getChecklistsList(card)[a.checklist_index - 1]?.items[a.item_index - 1];
+        const memberInfo = item?.assignedMembers?.length
+          ? item.assignedMembers.map((m) => `${m.name || m.email}${memberHasIcon(m) ? ' (com foto)' : ''}`).join(', ')
+          : 'Nenhum';
+        return {
+          content: [{ type: 'text', text: `✅ Item ${a.item_index} da checklist ${a.checklist_index} atualizado: **${item?.text ?? '?'}** [${item?.completed ? 'X' : ' '}] | Membros: ${memberInfo}` }],
+        };
+      }
+
+      case 'delete_checklist_item': {
+        const a = args as { card_id: number; checklist_index: number; item_index: number; confirm: boolean };
+        if (!a.confirm) {
+          return {
+            content: [{ type: 'text', text: '⚠️ Confirmação necessária: vais apagar um item. Para confirmar, define confirm: true.', isError: true }],
+          };
+        }
+        const card = await deleteChecklistItem(a.card_id, a.checklist_index, a.item_index);
+        const cl = getChecklistsList(card)[a.checklist_index - 1];
+        return {
+          content: [{ type: 'text', text: `🗑️ Item ${a.item_index} apagado da checklist ${a.checklist_index}. Restam ${cl?.items.length ?? 0} item(ns).` }],
+        };
+      }
+
       case 'get_card_comments': {
         const a = args as { card_id: number };
         const comments = await getCardComments(a.card_id);
@@ -494,22 +672,23 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const footer: string[] = ['---'];
 
         // Secção 6: CHECKLISTS
-        if (card.checklists && card.checklists.length > 0) {
+        const checklists = getChecklistsList(card);
+        if (checklists.length > 0) {
           footer.push('CHECKLISTS:');
-          for (const cl of card.checklists) {
-            const items = cl.items || [];
-            const done = items.filter((i) => i && (i.completed || i.checked)).length;
-            footer.push(`CHECKLIST: ${cl.title || 'Sem titulo'} (${done}/${items.length})`);
-            if (items.length === 0) {
+          footer.push('NOTA_CHECKLISTS: Usa checklist_index e item_index (começam em 1) para editar com as ferramentas add/update/delete_card_checklist e add/update/delete_checklist_item.');
+          for (let ci = 0; ci < checklists.length; ci++) {
+            const cl = checklists[ci];
+            const done = cl.items.filter((i) => i.completed).length;
+            footer.push(`CHECKLIST: ${cl.title} (checklist_index: ${ci + 1}) (${done}/${cl.items.length})`);
+            if (cl.items.length === 0) {
               footer.push('  - (vazia)');
             } else {
-              for (const item of items) {
-                if (!item) continue;
-                const txt = item.text || item.title;
-                const isDone = item.completed || item.checked;
-                if (txt) {
-                  footer.push(`  - [${isDone ? 'X' : ' '}] ${txt} | ${formatChecklistItemMembers(item)}`);
-                }
+              for (let ii = 0; ii < cl.items.length; ii++) {
+                const item = cl.items[ii];
+                const members = item.assignedMembers?.length
+                  ? `Membros: ${item.assignedMembers.map((m) => m.name || m.email).join(', ')}`
+                  : 'Membros: Nenhum';
+                footer.push(`  - [${item.completed ? 'X' : ' '}] ${item.text} (item_index: ${ii + 1}) | ${members}`);
               }
             }
           }

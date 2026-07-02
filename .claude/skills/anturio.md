@@ -15,6 +15,12 @@ This skill helps you interact with Anturio Boards - a project management tool.
 - `add_card_description` - Adiciona uma descrição a um cartão
 - `update_card_description` - Edita título/conteúdo de uma descrição (usa descricao_index de get_card)
 - `delete_card_description` - Apaga uma descrição (requer confirm: true; cartão deve ter >1 descrição)
+- `add_card_checklist` - Adiciona uma checklist vazia
+- `update_card_checklist` - Renomeia uma checklist (checklist_index de get_card)
+- `delete_card_checklist` - Apaga uma checklist (requer confirm: true)
+- `add_checklist_item` - Adiciona item a uma checklist
+- `update_checklist_item` - Edita item (texto, completed, member_emails, add_member_emails)
+- `delete_checklist_item` - Apaga item (requer confirm: true)
 - `get_card_comments` - Apenas comentários (preferir `get_card` para conteúdo completo)
 
 ## REGRA DE OURO: mostrar SEMPRE o conteúdo COMPLETO
@@ -38,6 +44,13 @@ Quando o utilizador pedir para **ver**, **mostrar** ou **abrir** um cartão (ou 
 | "Adiciona uma descrição ao cartão" | `add_card_description` |
 | "Edita a descrição 2 do cartão" | `update_card_description` com descricao_index |
 | "Apaga a descrição X" | `delete_card_description` com confirm: true |
+| "Adiciona checklist ao cartão" | `add_card_checklist` |
+| "Renomeia checklist 2" | `update_card_checklist` com checklist_index |
+| "Apaga checklist X" | `delete_card_checklist` com confirm: true |
+| "Adiciona item à checklist" | `add_checklist_item` |
+| "Adiciona membro X ao item" | `update_checklist_item` com **add_member_emails** (não member_emails) |
+| "Marca item como feito" | `update_checklist_item` com completed: true |
+| "Apaga item da checklist" | `delete_checklist_item` com confirm: true |
 | "Mostra o cartão com todos os detalhes" | **`get_card`** diretamente |
 
 ### O que apresentar integralmente (de `get_card`)

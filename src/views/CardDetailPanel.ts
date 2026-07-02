@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { Card, Comment, CurrentUser, boardsClient, CardAttachment, ProjectParticipant } from '../api/boardsClient';
+import { Card, CardMember, Comment, CurrentUser, boardsClient, CardAttachment, ProjectParticipant, ChecklistItemMember } from '../api/boardsClient';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -37,6 +37,63 @@ export class CardDetailPanel {
     this.panel.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
   }
 
+  private pickMemberIcon(member?: {
+    icon_url?: string;
+    avatar?: string;
+    icon?: string;
+    user_icon?: string;
+    photo?: string;
+    picture?: string;
+    avatar_url?: string;
+    user_avatar?: string;
+    img?: string;
+  }): string | undefined {
+    if (!member) return undefined;
+    return member.icon_url
+      || member.avatar
+      || member.icon
+      || member.user_icon
+      || member.photo
+      || member.picture
+      || member.avatar_url
+      || member.user_avatar
+      || member.img
+      || undefined;
+  }
+
+  private resolveMemberIconUrl(
+    member?: {
+      email?: string;
+      icon_url?: string;
+      avatar?: string;
+      icon?: string;
+      user_icon?: string;
+    },
+    participants: ProjectParticipant[] = [],
+  ): string {
+    const direct = this.pickMemberIcon(member);
+    if (direct) return boardsClient.resolveMediaUrl(direct);
+
+    const email = member?.email?.toLowerCase();
+    if (email && participants.length > 0) {
+      const participant = participants.find((p) => p.email?.toLowerCase() === email);
+      const fromParticipant = this.pickMemberIcon(participant);
+      if (fromParticipant) return boardsClient.resolveMediaUrl(fromParticipant);
+    }
+
+    return '';
+  }
+
+  private async loadProjectParticipants(card: Card): Promise<void> {
+    const projectId = card.project_id;
+    if (!projectId) {
+      this.projectParticipants = [];
+      return;
+    }
+
+    this.projectParticipants = await boardsClient.getProjectParticipantsEnriched(projectId);
+  }
+
   private async loadCardDetails(cardId: number, fallbackCard?: Card): Promise<void> {
     try {
       // Buscar utilizador atual
@@ -51,16 +108,7 @@ export class CardDetailPanel {
       this.card = fullCard;
       this.panel.title = fullCard.title;
 
-      // Buscar participantes do projeto se temos project_id
-      if (fullCard.project_id) {
-        try {
-          const projectData = await boardsClient.getProjectCards(fullCard.project_id);
-          this.projectParticipants = projectData.participants || [];
-        } catch (e) {
-          console.log('[CardDetailPanel] Não foi possível obter participantes:', e);
-          this.projectParticipants = [];
-        }
-      }
+      await this.loadProjectParticipants(fullCard);
 
       const activities = await boardsClient.getComments(cardId);
       const allCards = CardDetailPanel.sidebarCards.get('sidebar') || [];
@@ -80,6 +128,7 @@ export class CardDetailPanel {
         }
         try {
           const activities = await boardsClient.getComments(cardId);
+          await this.loadProjectParticipants(fallbackCard);
           this.panel.webview.html = this.buildHtml(fallbackCard, activities, this.projectParticipants, [], this.isPreview);
         } catch (e2) {
           console.error('[CardDetailPanel] Erro ao carregar comentários no fallback:', e2);
@@ -207,6 +256,7 @@ export class CardDetailPanel {
       try {
         console.log('[CardDetailPanel] Adding member to card:', msg.cardId, 'email:', msg.email);
         const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        await this.loadProjectParticipants(fullCard);
         const currentMembers = fullCard.members || [];
         // Verificar se já é membro
         if (currentMembers.some((m) => m.email?.toLowerCase() === msg.email?.toLowerCase())) {
@@ -215,11 +265,13 @@ export class CardDetailPanel {
         }
         // Obter dados do participante para adicionar
         const participant = this.projectParticipants.find((p) => p.email?.toLowerCase() === msg.email?.toLowerCase());
-        const newMember = {
+        const newMember: CardMember = {
           email: msg.email,
-          name: participant?.name || '',
-          icon_url: participant?.icon_url || '',
+          name: participant?.name || msg.email,
         };
+        if (participant?.icon_url) {
+          newMember.icon_url = participant.icon_url;
+        }
         const newMembers = [...currentMembers, newMember];
         await boardsClient.updateCardRaw(msg.cardId, {
           members: newMembers,
@@ -429,6 +481,7 @@ export class CardDetailPanel {
       try {
         console.log('[CardDetailPanel] Toggling checklist item member:', msg.cardId, 'checklist:', msg.checklistIndex, 'item:', msg.itemIndex, 'email:', msg.email);
         const fullCard = await boardsClient.getCardDetails(msg.cardId);
+        await this.loadProjectParticipants(fullCard);
         const checklists = fullCard.checklists || [];
         if (!checklists[msg.checklistIndex] || !checklists[msg.checklistIndex].items[msg.itemIndex]) throw new Error('Item não encontrado');
 
@@ -440,15 +493,16 @@ export class CardDetailPanel {
         const participant = this.projectParticipants.find(p => p.email === msg.email);
 
         if (memberIndex >= 0) {
-          // Remove member
           item.assignedMembers = currentMembers.filter(m => m.email !== msg.email);
         } else {
-          // Add member
-          item.assignedMembers = [...currentMembers, {
+          const newMember: ChecklistItemMember = {
             email: msg.email,
             name: participant?.name || msg.email,
-            icon_url: participant?.icon_url
-          }];
+          };
+          if (participant?.icon_url) {
+            newMember.icon_url = participant.icon_url;
+          }
+          item.assignedMembers = [...currentMembers, newMember];
         }
 
         await boardsClient.updateCardRaw(msg.cardId, {
@@ -647,35 +701,24 @@ export class CardDetailPanel {
 
     // Mostrar membros como mini-avatar ao lado do título
     // Obter emails dos membros atuais do cartão
-    const currentMemberEmails = new Set((card.members || []).map((m) => m.email?.toLowerCase()).filter(Boolean));
+    const cardMembers = card.members || [];
+    const currentMemberEmails = new Set(cardMembers.map((m) => m.email?.toLowerCase()).filter(Boolean));
 
-    // Obter participantes disponíveis que ainda não são membros
-    const availableParticipants = (participants || []).filter((p) => !currentMemberEmails.has(p.email?.toLowerCase()));
+    const projectPeople = (participants || []).filter((p) => p.email);
+    const availableParticipants = projectPeople.filter((p) => !currentMemberEmails.has(p.email?.toLowerCase()));
 
-    // membersAvatars com botão de remover para cada membro
-    const membersAvatars = card.members.length > 0
-      ? card.members.map((m) => {
+    const membersAvatars = cardMembers.length > 0
+      ? cardMembers.map((m) => {
         const initial = (m.name || m.email || "?").substring(0, 1).toUpperCase();
-        const anyM = m as any;
-        const memberIcon =
-          m.avatar ||
-          m.icon_url ||
-          m.user_icon ||
-          m.icon ||
-          anyM.photo ||
-          anyM.picture ||
-          anyM.user_avatar ||
-          anyM.avatar_url ||
-          anyM.img || '';
+        const memberIcon = this.resolveMemberIconUrl(m, projectPeople);
         const avatarHtml = memberIcon
-          ? `<img class="member-avatar member-img" src="${memberIcon}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
+          ? `<img class="member-avatar member-img" src="${this.escape(memberIcon)}" alt="${this.escape(m.name)}" title="${this.escape(m.name)}">`
           : `<span class="member-avatar" title="${this.escape(m.name)}">${initial}</span>`;
         return `<div class="member-wrapper" data-email="${this.escape(m.email)}">${avatarHtml}<span class="member-remove" title="Remover membro" onclick="window.removeMember(event, '${this.escape(m.email)}')">×</span></div>`;
       }).join('')
       : '';
 
-    // Botão de adicionar membros se houver participantes disponíveis
-    const addMemberButton = availableParticipants.length > 0
+    const addMemberButton = projectPeople.length > 0
       ? `<button class="add-member-btn" onclick="window.showAddMemberMenu(event)" title="Adicionar membro">+</button>`
       : '';
 
@@ -811,13 +854,22 @@ export class CardDetailPanel {
           const itemsHtml = cl.items?.length > 0
             ? cl.items.map((item, itemIdx) => {
               const isChecked = item.completed || item.checked || false;
-              const itemMembers = item.assignedMembers || [];
+              const itemMembers = item.assignedMembers || (item as { assigned_members?: ChecklistItemMember[] }).assigned_members || [];
               const membersHtml = itemMembers.length > 0
-                ? itemMembers.slice(0, 2).map((m, mIdx) => `
-                    <div class="checklist-item-member-avatar" title="${this.escape(m.name || m.email)}" style="z-index: ${mIdx + 1}">
-                      ${m.icon_url ? `<img src="${this.escape(m.icon_url)}" class="checklist-item-member-img">` : this.escape((m.name || m.email || '?').substring(0, 2).toUpperCase())}
+                ? itemMembers.slice(0, 2).map((m, mIdx) => {
+                  const icon = this.resolveMemberIconUrl(m, projectPeople);
+                  const avatarInner = icon
+                    ? `<img src="${this.escape(icon)}" class="checklist-item-member-img" alt="">`
+                    : this.escape((m.name || m.email || '?').substring(0, 2).toUpperCase());
+                  return `
+                    <div class="checklist-item-member-wrapper" style="z-index: ${mIdx + 1}">
+                      <div class="checklist-item-member-avatar" title="${this.escape(m.name || m.email)}">
+                        ${avatarInner}
+                      </div>
+                      <span class="checklist-item-member-remove" title="Remover membro" onclick="event.stopPropagation(); window.removeChecklistItemMember(${idx}, ${itemIdx}, '${this.escape(m.email)}')">×</span>
                     </div>
-                  `).join('') + (itemMembers.length > 2 ? `<div class="checklist-item-member-overflow">+${itemMembers.length - 2}</div>` : '')
+                  `;
+                }).join('') + (itemMembers.length > 2 ? `<div class="checklist-item-member-overflow">+${itemMembers.length - 2}</div>` : '')
                 : '';
               return `
               <div class="checklist-item">
@@ -830,9 +882,9 @@ export class CardDetailPanel {
                   <div class="checklist-item-member-menu-header">Membros do Item</div>
                   <div class="checklist-item-member-menu-list">
                     <div class="checklist-item-member-option ${!itemMembers.length ? 'selected' : ''}" onclick="window.removeChecklistItemMember(${idx}, ${itemIdx}, null)">✕ Remover todos</div>
-                    ${participants.map(p => `
+                    ${projectPeople.map(p => `
                       <div class="checklist-item-member-option ${itemMembers.some(m => m.email === p.email) ? 'selected' : ''}" onclick="window.toggleChecklistItemMember(${idx}, ${itemIdx}, '${this.escape(p.email)}')">
-                        ${p.icon_url ? `<img src="${this.escape(p.icon_url)}" class="checklist-item-member-option-img">` : this.escape((p.name || p.email || '?').substring(0, 2).toUpperCase())}
+                        ${this.resolveMemberIconUrl(p, projectPeople) ? `<img src="${this.escape(this.resolveMemberIconUrl(p, projectPeople))}" class="checklist-item-member-option-img">` : this.escape((p.name || p.email || '?').substring(0, 2).toUpperCase())}
                         <span>${this.escape(p.name || p.email)}</span>
                       </div>
                     `).join('')}
@@ -1158,8 +1210,11 @@ export class CardDetailPanel {
     .checklist-item-text.checked { text-decoration: line-through; opacity: 0.6; }
     .checklist-item-input { flex: 1; padding: 2px 6px; border: 1px solid var(--vscode-focusBorder); border-radius: 3px; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-size: inherit; }
     .checklist-item-members { display: flex; align-items: center; gap: 2px; }
-    .checklist-item-member-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--vscode-focusBorder); display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: var(--vscode-foreground); position: relative; margin-left: -4px; border: 2px solid var(--vscode-editor-background); }
+    .checklist-item-member-wrapper { position: relative; display: inline-block; margin-left: -4px; }
+    .checklist-item-member-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--vscode-focusBorder); display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: var(--vscode-foreground); border: 2px solid var(--vscode-editor-background); overflow: hidden; }
     .checklist-item-member-img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+    .checklist-item-member-remove { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; background: #e74c3c; color: white; border-radius: 50%; font-size: 10px; line-height: 12px; text-align: center; cursor: pointer; display: none; z-index: 2; }
+    .checklist-item-member-wrapper:hover .checklist-item-member-remove { display: block; }
     .checklist-item-member-overflow { width: 24px; height: 24px; border-radius: 50%; background: var(--vscode-button-secondaryBackground); display: flex; align-items: center; justify-content: center; font-size: 0.65em; color: var(--vscode-foreground); margin-left: -4px; border: 2px solid var(--vscode-editor-background); }
     .checklist-item-member-btn { background: none; border: none; cursor: pointer; font-size: 0.9em; opacity: 0.6; padding: 2px; }
     .checklist-item-member-btn:hover { opacity: 1; }
@@ -1325,7 +1380,7 @@ export class CardDetailPanel {
     <div class="add-member-list">
       ${availableParticipants.map((p) => `
         <div class="add-member-option" onclick="window.addMember('${this.escape(p.email)}')">
-          ${p.icon_url ? `<img class="option-avatar" src="${p.icon_url}">` : `<span class="option-avatar">${(p.name || p.email || "?").substring(0, 1).toUpperCase()}</span>`}
+          ${this.resolveMemberIconUrl(p, projectPeople) ? `<img class="option-avatar" src="${this.escape(this.resolveMemberIconUrl(p, projectPeople))}">` : `<span class="option-avatar">${(p.name || p.email || "?").substring(0, 1).toUpperCase()}</span>`}
           <span class="option-name">${this.escape(p.name || p.email)}</span>
         </div>
       `).join('')}
