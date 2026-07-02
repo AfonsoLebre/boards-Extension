@@ -80,6 +80,7 @@ export interface Card {
   attachments?: CardAttachment[];
   cover?: string;
   project_id?: number;
+  archived?: boolean;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -269,6 +270,14 @@ export async function removeCardMembers(cardId: number, emails: string[]): Promi
   }
 
   return updateCardRaw(cardId, { members: newMembers });
+}
+
+export async function setCardArchived(cardId: number, archived: boolean): Promise<Card> {
+  const card = await getCardDetails(cardId);
+  if (card.archived === archived) {
+    throw new Error(archived ? 'O cartão já está arquivado' : 'O cartão já não está arquivado');
+  }
+  return updateCardRaw(cardId, { archived });
 }
 
 export async function fetchAttachmentBinary(url: string): Promise<{ buffer: Buffer; mimeType: string }> {

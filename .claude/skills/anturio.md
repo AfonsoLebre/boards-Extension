@@ -17,6 +17,8 @@ This skill helps you interact with Anturio Boards - a project management tool.
 - `delete_card_description` - Apaga uma descrição (requer confirm: true; cartão deve ter >1 descrição)
 - `add_card_member` - Adiciona membro(s) ao cartão (email ou add_member_emails)
 - `remove_card_member` - Remove membro(s) do cartão (email ou remove_member_emails)
+- `archive_card` - Arquiva um cartão (requer confirm: true)
+- `unarchive_card` - Desarquiva um cartão
 - `add_card_checklist` - Adiciona uma checklist vazia
 - `update_card_checklist` - Renomeia uma checklist (checklist_index de get_card)
 - `delete_card_checklist` - Apaga uma checklist (requer confirm: true)
@@ -48,6 +50,8 @@ Quando o utilizador pedir para **ver**, **mostrar** ou **abrir** um cartão (ou 
 | "Apaga a descrição X" | `delete_card_description` com confirm: true |
 | "Adiciona membro X ao cartão" | `add_card_member` com email |
 | "Remove membro X do cartão" | `remove_card_member` com email |
+| "Arquiva o cartão X" | `archive_card` com confirm: true |
+| "Desarquiva o cartão X" | `unarchive_card` |
 | "Adiciona checklist ao cartão" | `add_card_checklist` |
 | "Renomeia checklist 2" | `update_card_checklist` com checklist_index |
 | "Apaga checklist X" | `delete_card_checklist` com confirm: true |

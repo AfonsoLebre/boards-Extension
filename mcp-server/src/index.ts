@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
-import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails, addCardDescription, updateCardDescription, deleteCardDescription, getDescriptionsList, addCardMembers, removeCardMembers } from './api.js';
+import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails, addCardDescription, updateCardDescription, deleteCardDescription, getDescriptionsList, addCardMembers, removeCardMembers, setCardArchived } from './api.js';
 import {
   addCardChecklist,
   updateCardChecklist,
@@ -150,6 +150,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             items: { type: 'string' },
             description: 'Lista de emails a remover do cartão (opcional)',
           },
+        },
+        required: ['card_id'],
+      },
+    },
+    {
+      name: 'archive_card',
+      description:
+        'Arquiva um cartão. O cartão deixa de aparecer no quadro ativo mas mantém-se acessível via get_card. Requer confirm: true.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
+          confirm: { type: 'boolean', description: 'Deve ser true após confirmação do utilizador' },
+        },
+        required: ['card_id', 'confirm'],
+      },
+    },
+    {
+      name: 'unarchive_card',
+      description: 'Desarquiva um cartão, restaurando-o no quadro ativo na coluna original.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          card_id: { type: 'number', description: 'ID do cartão' },
         },
         required: ['card_id'],
       },
@@ -584,6 +608,37 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       }
 
+      case 'archive_card': {
+        const a = args as { card_id: number; confirm: boolean };
+        if (!a.confirm) {
+          return {
+            content: [{
+              type: 'text',
+              text: '⚠️ Confirmação necessária: vais arquivar este cartão. Para confirmar, define confirm: true.',
+              isError: true,
+            }],
+          };
+        }
+        const card = await setCardArchived(a.card_id, true);
+        return {
+          content: [{
+            type: 'text',
+            text: `📦 Cartão **${card.title}** (ID: ${card.id}) arquivado. Usa unarchive_card para restaurar ou get_card para ver o conteúdo.`,
+          }],
+        };
+      }
+
+      case 'unarchive_card': {
+        const a = args as { card_id: number };
+        const card = await setCardArchived(a.card_id, false);
+        return {
+          content: [{
+            type: 'text',
+            text: `✅ Cartão **${card.title}** (ID: ${card.id}) desarquivado e restaurado na coluna **${card.status_label || card.status}**.`,
+          }],
+        };
+      }
+
       case 'add_card_checklist': {
         const a = args as { card_id: number; title: string };
         const card = await addCardChecklist(a.card_id, a.title);
@@ -706,6 +761,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         const priorityMap: Record<string, string> = { low: 'Baixa', normal: 'Normal', high: 'Alta', critical: 'Critica' };
         header.push(`COLUNA: ${card.status_label || 'N/A'}`);
         header.push(`PRIORIDADE: ${priorityMap[card.priority] || card.priority}`);
+        header.push(`ARQUIVADO: ${card.archived ? 'Sim' : 'Não'}`);
 
         if (card.start_date) header.push(`DATA INICIO: ${card.start_date}`);
         if (card.due_date) header.push(`DATA FIM: ${card.due_date}`);

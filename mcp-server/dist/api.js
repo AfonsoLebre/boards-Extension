@@ -164,6 +164,13 @@ export async function removeCardMembers(cardId, emails) {
     }
     return updateCardRaw(cardId, { members: newMembers });
 }
+export async function setCardArchived(cardId, archived) {
+    const card = await getCardDetails(cardId);
+    if (card.archived === archived) {
+        throw new Error(archived ? 'O cartão já está arquivado' : 'O cartão já não está arquivado');
+    }
+    return updateCardRaw(cardId, { archived });
+}
 export async function fetchAttachmentBinary(url) {
     const fullUrl = url.startsWith('http') ? url : url.startsWith('/') ? `${SERVER_URL}${url}` : url;
     const res = await fetch(fullUrl, {

@@ -71,6 +71,7 @@ export interface Card {
     attachments?: CardAttachment[];
     cover?: string;
     project_id?: number;
+    archived?: boolean;
 }
 export type DescriptionInput = {
     id?: number;
@@ -87,6 +88,7 @@ export declare function updateCardDescription(cardId: number, descriptionIndex: 
 export declare function deleteCardDescription(cardId: number, descriptionIndex: number): Promise<Card>;
 export declare function addCardMembers(cardId: number, emails: string[]): Promise<Card>;
 export declare function removeCardMembers(cardId: number, emails: string[]): Promise<Card>;
+export declare function setCardArchived(cardId: number, archived: boolean): Promise<Card>;
 export declare function fetchAttachmentBinary(url: string): Promise<{
     buffer: Buffer;
     mimeType: string;
