@@ -38,6 +38,41 @@ function cleanHtmlDescription(html: string): string {
     .trim();
 }
 
+function formatCardSummaryLine(card: {
+  id: number;
+  title: string;
+  priority: string;
+  status_label: string;
+  due_date?: string;
+  members: Array<{ name: string }>;
+}): string {
+  const priority = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' }[card.priority] ?? '⚪';
+  const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
+  const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
+  return `- ${priority} **${card.title}** (ID: ${card.id}) | ${card.status_label}${due}${members}`;
+}
+
+function collectDescriptions(card: {
+  description?: string;
+  descriptions?: Array<{ title: string; content: string }>;
+}): Array<{ title: string; content: string }> {
+  const result: Array<{ title: string; content: string }> = [];
+  if (card.descriptions?.length) {
+    for (const d of card.descriptions) {
+      if (d.content?.trim()) {
+        result.push({ title: d.title || 'Descrição', content: d.content });
+      }
+    }
+  }
+  if (result.length === 0 && card.description?.trim()) {
+    result.push({ title: 'Descrição', content: card.description });
+  }
+  return result;
+}
+
+const LIST_CARDS_HEADER =
+  'NOTA: Esta é uma listagem resumida. Para mostrar o conteúdo COMPLETO de um cartão (descrições, checklists, anexos, comentários, histórico), usa get_card com o card_id. A AI deve reproduzir o output de get_card integralmente, sem resumir.';
+
 const server = new Server(
   { name: 'anturio-boards', version: '0.1.0' },
   { capabilities: { tools: {}, logging: {} } },
@@ -53,7 +88,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'get_project_cards',
       description:
-        'Devolve todas as colunas e cards de um projeto. Usa list_projects primeiro se não souberes o ID.',
+        'Lista colunas e cartões de um projeto (título, ID, coluna, prioridade, membros). NÃO inclui descrições, checklists, anexos nem comentários. Para mostrar o conteúdo COMPLETO de um cartão ao utilizador, usa get_card com o card_id.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -64,7 +99,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'search_cards',
-      description: 'Procura cards por título ou descrição em todos os projetos ou num projeto específico.',
+      description:
+        'Procura cartões por título ou descrição. Devolve correspondências com ID. Para mostrar o conteúdo COMPLETO ao utilizador, usa get_card com o card_id encontrado.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -128,7 +164,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'get_card',
-      description: 'Mostra todos os detalhes de um card: título, descrição, checklists, anexos, membros, etiquetas, datas (início e limite), prioridade e coluna atual. Inclui também comentários e histórico de atividades.',
+      description:
+        'OBRIGATÓRIO para mostrar um cartão ao utilizador. Devolve TODO o conteúdo: título, descrições completas, checklists, anexos, membros, etiquetas, datas, prioridade, coluna, comentários e histórico. A AI deve apresentar este output integralmente ao utilizador — sem resumir, truncar ou omitir conteúdo.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -176,7 +213,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         }
 
         const { columns, cards } = await getProjectCards(projectId);
-        const lines: string[] = [];
+        const lines: string[] = [LIST_CARDS_HEADER];
 
         for (const col of columns) {
           const colCards = cards.filter((c) => c.status === col.id);
@@ -185,27 +222,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
             lines.push('_Sem cards_');
           } else {
             for (const card of colCards) {
-              const priority = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' }[card.priority] ?? '⚪';
-              const due = card.due_date ? ` | prazo: ${card.due_date}` : '';
-              const members = card.members.length > 0 ? ` | ${card.members.map((m) => m.name).join(', ')}` : '';
-              lines.push(`- ${priority} **${card.title}** (ID: ${card.id})${due}${members}`);
-              // Mostrar todas as descrições (do array descriptions ou do campo description simples)
-              const allDescriptions: string[] = [];
-              if (card.descriptions && card.descriptions.length > 0) {
-                card.descriptions.forEach((d) => {
-                  if (d.content && d.content.trim()) {
-                    allDescriptions.push(d.content);
-                  }
-                });
-              }
-              if (allDescriptions.length === 0 && card.description) {
-                allDescriptions.push(card.description);
-              }
-              allDescriptions.forEach((desc, i) => {
-                const title = card.descriptions?.[i]?.title || 'Descrição';
-                const cleanDesc = cleanHtmlDescription(desc);
-                lines.push(`  _${title}: ${cleanDesc.slice(0, 15000)}${cleanDesc.length > 15000 ? '…' : ''}_`);
-              });
+              lines.push(formatCardSummaryLine(card));
             }
           }
         }
@@ -219,7 +236,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           ? [{ id: a.project_id }]
           : await listProjects();
 
-        const results: Array<{ card: { id: number; title: string; description?: string; descriptions?: Array<{ id: number; title: string; content: string }>; priority: string; status_label: string }; projectTitle: string }> = [];
+        const results: Array<{ card: { id: number; title: string; description?: string; descriptions?: Array<{ id: number; title: string; content: string }>; priority: string; status_label: string; due_date?: string; members: Array<{ name: string }> }; projectTitle: string }> = [];
 
         await Promise.all(
           projects.map(async (p) => {
@@ -247,30 +264,12 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           return { content: [{ type: 'text', text: `Nenhum card encontrado para "${a.query}".` }] };
         }
 
-        const lines: string[] = [];
+        const lines: string[] = [LIST_CARDS_HEADER, `**${results.length} resultado(s):**`];
         results.forEach(({ card, projectTitle }) => {
-          const priority = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' }[card.priority] ?? '⚪';
-          lines.push(`- ${priority} **${card.title}** (${projectTitle} — ${card.status_label})`);
-          // Mostrar todas as descrições nos resultados da pesquisa
-          const allDescriptions: string[] = [];
-          if (card.descriptions && card.descriptions.length > 0) {
-            card.descriptions.forEach((d) => {
-              if (d.content && d.content.trim()) {
-                allDescriptions.push(d.content);
-              }
-            });
-          }
-          if (allDescriptions.length === 0 && card.description) {
-            allDescriptions.push(card.description);
-          }
-          allDescriptions.forEach((desc, i) => {
-            const title = card.descriptions?.[i]?.title || 'Descrição';
-            const cleanDesc = cleanHtmlDescription(desc);
-            lines.push(`  _${title}: ${cleanDesc.slice(0, 15000)}${cleanDesc.length > 15000 ? '…' : ''}_`);
-          });
+          lines.push(formatCardSummaryLine({ ...card, status_label: `${projectTitle} — ${card.status_label}` }));
         });
 
-        return { content: [{ type: 'text', text: `**${results.length} resultado(s):**\n\n${lines.join('\n')}` }] };
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
       }
 
       case 'create_card': {
@@ -352,138 +351,119 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       case 'get_card': {
         const a = args as { card_id: number };
         const card = await getCardDetails(a.card_id);
-        const comments = await getCardComments(a.card_id);
-
-        const lines: string[] = [];
-
-        // Título e ID
-        lines.push(`## 📝 ${card.title} (ID: ${card.id})`);
-        lines.push('');
-
-        // Coluna/Status
-        lines.push(`**Coluna:** ${card.status_label}`);
-        lines.push('');
-
-        // Prioridade
-        const priorityIcons: Record<string, string> = { low: '🔵', normal: '🟢', high: '🟠', critical: '🔴' };
-        lines.push(`**Prioridade:** ${priorityIcons[card.priority] || '⚪'} ${card.priority}`);
-        lines.push('');
-
-        // Datas
-        if (card.start_date || card.due_date) {
-          if (card.start_date) {
-            lines.push(`**Data de Início:** ${card.start_date}`);
-          }
-          if (card.due_date) {
-            lines.push(`**Data Limite:** ${card.due_date}`);
-          }
-          lines.push('');
+        let comments: Awaited<ReturnType<typeof getCardComments>> = [];
+        try {
+          comments = await getCardComments(a.card_id);
+        } catch {
+          // Comentários são opcionais se o endpoint de atividades não estiver disponível.
         }
 
-        // Membros
+        const sections: string[] = [];
+
+        // Secção 1: Identidade
+        sections.push(`CARTAO: ${card.title} (ID: ${card.id})`);
+
+        // Secção 2: Estado Básico (sempre presente, mesmo que vazio)
+        const priorityMap: Record<string, string> = { low: 'Baixa', normal: 'Normal', high: 'Alta', critical: 'Critica' };
+        sections.push(`COLUNA: ${card.status_label || 'N/A'}`);
+        sections.push(`PRIORIDADE: ${priorityMap[card.priority] || card.priority}`);
+
+        // Secção 3: Datas
+        if (card.start_date) sections.push(`DATA INICIO: ${card.start_date}`);
+        if (card.due_date) sections.push(`DATA FIM: ${card.due_date}`);
+
+        // Secção 4: Membros e Etiquetas
         if (card.members && card.members.length > 0) {
-          const memberNames = card.members.map((m) => m.name || m.email).join(', ');
-          lines.push(`**Membros:** ${memberNames}`);
-          lines.push('');
+          sections.push(`MEMBROS: ${card.members.map((m) => m.name || m.email).join(', ')}`);
+        } else {
+          sections.push('MEMBROS: Nenhum');
         }
 
-        // Etiquetas/Labels
         if (card.labels && card.labels.length > 0) {
-          const labelTexts = card.labels.map((l) => `[${l.text}]`).join(' ');
-          lines.push(`**Etiquetas:** ${labelTexts}`);
-          lines.push('');
+          sections.push(`ETIQUETAS: ${card.labels.map((l) => l.text).join(', ')}`);
+        } else {
+          sections.push('ETIQUETAS: Nenhuma');
         }
 
-        // Descrição principal
-        if (card.description) {
-          const cleanDesc = cleanHtmlDescription(card.description);
-          if (cleanDesc) {
-            lines.push('**Descrição:**');
-            lines.push(cleanDesc);
-            lines.push('');
+        sections.push('---');
+
+        // Secção 5: DESCRIÇÃO
+        const descriptions = collectDescriptions(card);
+        if (descriptions.length > 0) {
+          sections.push('DESCRICAO:');
+          for (const d of descriptions) {
+            sections.push(`[${d.title}]`);
+            sections.push(cleanHtmlDescription(d.content));
           }
+        } else {
+          sections.push('DESCRICAO: Nenhuma');
         }
+        sections.push('---');
 
-        // Descrições adicionais
-        if (card.descriptions && card.descriptions.length > 0) {
-          lines.push('**Descrições Adicionais:**');
-          for (const desc of card.descriptions) {
-            const cleanContent = cleanHtmlDescription(desc.content);
-            if (cleanContent) {
-              lines.push(`\n### ${desc.title}`);
-              lines.push(cleanContent);
-            }
-          }
-          lines.push('');
-        }
-
-        // Checklists
+        // Secção 6: CHECKLISTS (bem explícita)
         if (card.checklists && card.checklists.length > 0) {
-          lines.push('**Checklists:**');
-          for (const checklist of card.checklists) {
-            // Safety check: ensure checklist and items exist
-            const items = checklist.items || [];
-            const completed = items.filter((i) => i && i.completed).length;
-            const total = items.length;
-            lines.push(`\n### ${checklist.title || 'Sem título'} (${completed}/${total})`);
-            // Debug: show raw data if items seem wrong
-            if (total === 0) {
-              lines.push('_Checklist vazia_');
-            } else if (total === 1 && items[0]) {
-              // If only one item, show raw JSON for debugging
-              lines.push(`_Debug - item: ${JSON.stringify(items[0])}_`);
-            }
-            for (const item of items) {
-              if (item && item.title) {
-                const check = item.completed ? '☑️' : '⬜';
-                lines.push(`${check} ${item.title}`);
+          sections.push('CHECKLISTS:');
+          for (const cl of card.checklists) {
+            const items = cl.items || [];
+            const done = items.filter((i) => i && (i.completed || i.checked)).length;
+            sections.push(`CHECKLIST: ${cl.title || 'Sem titulo'} (${done}/${items.length})`);
+            if (items.length === 0) {
+              sections.push('  - (vazia)');
+            } else {
+              for (const item of items) {
+                if (!item) continue;
+                const txt = item.text || item.title;
+                const isDone = item.completed || item.checked;
+                if (txt) {
+                  sections.push(`  - [${isDone ? 'X' : ' '}] ${txt}`);
+                }
               }
             }
           }
-          lines.push('');
         } else {
-          lines.push('_Nenhuma checklist_');
+          sections.push('CHECKLISTS: Nenhuma');
         }
+        sections.push('---');
 
-        // Anexos
+        // Secção 7: Anexos
         if (card.attachments && card.attachments.length > 0) {
-          lines.push('**Anexos:**');
+          sections.push('ANEXOS:');
           for (const att of card.attachments) {
-            // Safety: ensure attachment has required fields
-            if (att && att.name && att.url) {
-              const typeIcon = att.type?.startsWith('image/') ? '🖼️' : '📎';
-              lines.push(`- ${typeIcon} [${att.name}](${att.url})`);
+            if (att && att.name) {
+              sections.push(`  - ${att.name}`);
             }
           }
-          lines.push('');
+        } else {
+          sections.push('ANEXOS: Nenhum');
         }
+        sections.push('---');
 
-        // Comentários e Histórico
-        if (comments.length > 0) {
-          const commentItems = comments.filter((c) => c.type === 'comment');
-          const historyItems = comments.filter((c) => c.type !== 'comment');
-
-          lines.push(`**Comentários e Histórico (${comments.length}):**`);
-
-          for (const c of comments) {
+        // Secção 8: Comentários
+        const realComments = comments.filter((c) => c.type === 'comment');
+        if (realComments.length > 0) {
+          sections.push('COMENTARIOS:');
+          for (const c of realComments) {
             const dateStr = new Date(c.created_at).toLocaleString('pt-PT');
-            if (c.type === 'comment') {
-              lines.push(`\n💬 **${c.user_name}** (${dateStr}):\n${c.content}`);
-            } else {
-              const iconMap: Record<string, string> = {
-                card_created: '✨',
-                status_changed: '📍',
-                moved: '➡️',
-                priority_changed: '🔢',
-                comment: '💬',
-              };
-              const icon = iconMap[c.type] || '📋';
-              lines.push(`\n${icon} **${c.user_name}** (${dateStr}) — ${c.type}:\n${c.content}`);
-            }
+            sections.push(`  ${c.user_name} (${dateStr}): ${c.content}`);
           }
+        } else {
+          sections.push('COMENTARIOS: Nenhum');
+        }
+        sections.push('---');
+
+        // Secção 9: Histórico
+        const history = comments.filter((c) => c.type !== 'comment');
+        if (history.length > 0) {
+          sections.push('HISTORICO:');
+          for (const h of history) {
+            const dateStr = new Date(h.created_at).toLocaleString('pt-PT');
+            sections.push(`  ${h.type} por ${h.user_name} em ${dateStr}`);
+          }
+        } else {
+          sections.push('HISTORICO: Nenhum');
         }
 
-        return { content: [{ type: 'text', text: lines.join('\n') }] };
+        return { content: [{ type: 'text', text: sections.join('\n') }] };
       }
 
       default:

@@ -17,8 +17,10 @@ export interface CardDescription {
 }
 export interface CardChecklistItem {
     id: string;
-    title: string;
-    completed: boolean;
+    title?: string;
+    text?: string;
+    completed?: boolean;
+    checked?: boolean;
 }
 export interface CardChecklist {
     id: string;

@@ -267,6 +267,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       console.log('[Anturio] Starting MCP server...');
       await setupMcpConfig(context);
       startMcpServer(context);
+      installSkill(context);
       provider.refresh();
     }
   });
@@ -454,6 +455,35 @@ function startMcpServer(context: vscode.ExtensionContext): void {
   });
 
   context.subscriptions.push({ dispose: () => mcpProcess?.kill() });
+}
+
+function installSkill(context: vscode.ExtensionContext): void {
+  try {
+    // Find skill file in extension directory
+    const parentSkillPath = path.join(context.extensionPath, '..', '.claude', 'skills', 'anturio.md');
+    const siblingSkillPath = path.join(context.extensionPath, '.claude', 'skills', 'anturio.md');
+
+    const skillPath = fs.existsSync(parentSkillPath)
+      ? parentSkillPath
+      : fs.existsSync(siblingSkillPath)
+        ? siblingSkillPath
+        : null;
+
+    if (!skillPath) {
+      console.log('[Anturio] Skill file not found at:', parentSkillPath, 'or', siblingSkillPath);
+      return;
+    }
+
+    // Copy to Claude Code skills directory
+    const claudeSkillsDir = path.join(os.homedir(), '.claude', 'skills');
+    fs.mkdirSync(claudeSkillsDir, { recursive: true });
+    const destPath = path.join(claudeSkillsDir, 'anturio.md');
+
+    fs.copyFileSync(skillPath, destPath);
+    console.log('[Anturio] Skill installed to:', destPath);
+  } catch (err) {
+    console.error('[Anturio] Error installing skill:', err);
+  }
 }
 
 function writeMcpToFile(

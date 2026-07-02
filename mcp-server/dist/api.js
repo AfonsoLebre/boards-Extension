@@ -18,6 +18,23 @@ async function request(method, path, body) {
     }
     return res.json();
 }
+/** Tenta vários paths GET até um responder (útil entre produção e dev local). */
+async function requestGetFirst(paths) {
+    let lastError = null;
+    for (const path of paths) {
+        try {
+            return await request('GET', path);
+        }
+        catch (err) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            lastError = error;
+            if (!error.message.startsWith('API 404')) {
+                throw error;
+            }
+        }
+    }
+    throw lastError ?? new Error('Nenhum endpoint disponível para este pedido.');
+}
 export async function listProjects() {
     const data = await request('GET', '/api/v1/projects');
     return data.projects;
@@ -46,8 +63,28 @@ export async function deleteCard(cardId) {
     await request('DELETE', `/api/v1/cards/${cardId}`);
 }
 export async function getCardComments(cardId) {
-    return request('GET', `/api/tarefas/${cardId}/activities`);
+    return requestGetFirst([
+        `/api/tarefas/${cardId}/activities`,
+        `/api/v1/cards/${cardId}/activities`,
+        `/server-api/api/tarefas/${cardId}/activities`,
+    ]);
 }
 export async function getCardDetails(cardId) {
-    return request('GET', `/api/tarefas/${cardId}`);
+    try {
+        return await requestGetFirst([
+            `/api/v1/cards/${cardId}`,
+            `/api/tarefas/${cardId}`,
+            `/server-api/api/tarefas/${cardId}`,
+        ]);
+    }
+    catch {
+        const projects = await listProjects();
+        for (const project of projects) {
+            const { cards } = await getProjectCards(project.id);
+            const card = cards.find((c) => c.id === cardId);
+            if (card)
+                return card;
+        }
+        throw new Error(`Card ${cardId} não encontrado.`);
+    }
 }

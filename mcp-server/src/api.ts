@@ -23,8 +23,10 @@ export interface CardDescription {
 
 export interface CardChecklistItem {
   id: string;
-  title: string;
-  completed: boolean;
+  title?: string;
+  text?: string;
+  completed?: boolean;
+  checked?: boolean;
 }
 
 export interface CardChecklist {
@@ -77,6 +79,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
 
   return res.json() as Promise<T>;
+}
+
+/** Tenta vários paths GET até um responder (útil entre produção e dev local). */
+async function requestGetFirst<T>(paths: string[]): Promise<T> {
+  let lastError: Error | null = null;
+
+  for (const path of paths) {
+    try {
+      return await request<T>('GET', path);
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      lastError = error;
+      if (!error.message.startsWith('API 404')) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Nenhum endpoint disponível para este pedido.');
 }
 
 export async function listProjects(): Promise<Project[]> {
@@ -133,9 +154,27 @@ export interface CardComment {
 }
 
 export async function getCardComments(cardId: number): Promise<CardComment[]> {
-  return request<CardComment[]>('GET', `/api/tarefas/${cardId}/activities`);
+  return requestGetFirst<CardComment[]>([
+    `/api/tarefas/${cardId}/activities`,
+    `/api/v1/cards/${cardId}/activities`,
+    `/server-api/api/tarefas/${cardId}/activities`,
+  ]);
 }
 
 export async function getCardDetails(cardId: number): Promise<Card> {
-  return request<Card>('GET', `/api/tarefas/${cardId}`);
+  try {
+    return await requestGetFirst<Card>([
+      `/api/v1/cards/${cardId}`,
+      `/api/tarefas/${cardId}`,
+      `/server-api/api/tarefas/${cardId}`,
+    ]);
+  } catch {
+    const projects = await listProjects();
+    for (const project of projects) {
+      const { cards } = await getProjectCards(project.id);
+      const card = cards.find((c) => c.id === cardId);
+      if (card) return card;
+    }
+    throw new Error(`Card ${cardId} não encontrado.`);
+  }
 }
