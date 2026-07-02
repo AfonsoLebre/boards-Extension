@@ -284,6 +284,7 @@ function getMcpEnv(apiKey: string, serverUrl: string): Record<string, string> {
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
     env.ANTURIO_WORKSPACE_ROOT = workspaceRoot;
     env.ANTURIO_IMAGE_CACHE_DIR = path.join(workspaceRoot, '.anturio', 'card-images');
+    env.ANTURIO_ATTACHMENT_CACHE_DIR = path.join(workspaceRoot, '.anturio', 'card-attachments');
   }
   return env;
 }

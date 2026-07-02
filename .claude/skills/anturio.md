@@ -6,7 +6,8 @@ This skill helps you interact with Anturio Boards - a project management tool.
 
 - `list_projects` - Lista todos os projetos
 - `get_project_cards` - Lista colunas e cartões (apenas resumo: título, ID, coluna, prioridade, membros)
-- `get_card` - **OBRIGATÓRIO para mostrar cartões ao utilizador** — devolve TODO o conteúdo
+- `get_card` - **OBRIGATÓRIO para mostrar cartões** — conteúdo completo com anexos materializados
+- `get_card_attachment` - Abre/visualiza um anexo (imagem, texto ou link ABRIR)
 - `search_cards` - Pesquisa cartões por título ou descrição (devolve IDs; usa `get_card` para detalhes)
 - `create_card` - Cria um novo cartão
 - `move_card` - Move um cartão para outra coluna
@@ -30,6 +31,7 @@ Quando o utilizador pedir para **ver**, **mostrar** ou **abrir** um cartão (ou 
 | "Lista projetos" | `list_projects` |
 | "Mostra os cartões do projeto X" (visão geral) | `get_project_cards` → depois `get_card` para cada cartão se pedir detalhe |
 | "Mostra o cartão Y" / "Mostra-me o Card de Testes" | `get_project_cards` ou `search_cards` só para encontrar o ID → **`get_card`** |
+| "Abre o anexo X do cartão" | **`get_card_attachment`** |
 | "Mostra o cartão com todos os detalhes" | **`get_card`** diretamente |
 
 ### O que apresentar integralmente (de `get_card`)
@@ -37,7 +39,7 @@ Quando o utilizador pedir para **ver**, **mostrar** ou **abrir** um cartão (ou 
 - Todas as descrições completas, com imagens em **caminhos de ficheiro curtos** (`![...](.anturio/card-images/...)` ou `file:///...`) intercaladas no texto
 - **Copia cada linha `![...](caminho)` na posição correta** — nunca uses base64, nunca digas "imagem embutida de X KB", nunca remetas para ficheiros de ferramenta MCP
 - Todos os itens de checklists com estado (concluído / pendente) e membros atribuídos a cada item
-- Todos os anexos
+- **Anexos:** imagens com `![nome](caminho)` + preview; texto com secção `CONTEUDO:`; outros com `ABRIR: [nome](caminho)` — copia tal como vem
 - Todas as etiquetas e membros
 - Todos os comentários
 - Todo o histórico de atividades

@@ -6,6 +6,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, } from '@modelcontextpro
 import express from 'express';
 import { listProjects, getProjectCards, createCard, moveCard, deleteCard, getCardComments, getCardDetails } from './api.js';
 import { parseDescriptionContent } from './descriptionMedia.js';
+import { materializeAllAttachments, materializeAttachment } from './attachmentMedia.js';
 const TRANSPORT = process.env.TRANSPORT ?? 'stdio';
 const PORT = parseInt(process.env.MCP_PORT ?? '3100', 10);
 function formatCardSummaryLine(card) {
@@ -122,8 +123,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             },
         },
         {
+            name: 'get_card_attachment',
+            description: 'Abre/visualiza um anexo de um cartão. Imagens: preview + caminho local. Texto: conteúdo completo. Outros: caminho local para abrir. Usa get_card para listar anexos (índice começa em 1).',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    card_id: { type: 'number', description: 'ID do cartão' },
+                    attachment_index: { type: 'number', description: 'Índice do anexo (1 = primeiro)' },
+                    attachment_name: { type: 'string', description: 'Nome do anexo (alternativa ao índice)' },
+                },
+                required: ['card_id'],
+            },
+        },
+        {
             name: 'get_card',
-            description: 'OBRIGATÓRIO para mostrar um cartão ao utilizador. Imagens nas descrições são guardadas em ficheiros locais com caminhos curtos (![...](caminho)) intercalados no texto — NUNCA base64. Reproduz cada linha ![...](caminho) na posição correta da descrição. Devolve também blocos image para visualização. Conteúdo completo: descrições, checklists, anexos, comentários, histórico.',
+            description: 'OBRIGATÓRIO para mostrar um cartão ao utilizador. Imagens nas descrições e anexos de imagem usam caminhos locais curtos. Anexos de texto incluem CONTEUDO; outros têm link ABRIR. Usa get_card_attachment para ver um anexo específico. Reproduz caminhos ![...](...) e [nome](caminho) tal como vêm.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -354,45 +368,76 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
                     footer.push('CHECKLISTS: Nenhuma');
                 }
                 footer.push('---');
-                // Secção 7: Anexos
+                content.push({ type: 'text', text: footer.join('\n') });
+                // Secção 7: Anexos (materializados com preview)
                 if (card.attachments && card.attachments.length > 0) {
-                    footer.push('ANEXOS:');
-                    for (const att of card.attachments) {
-                        if (att && att.name) {
-                            footer.push(`  - ${att.name}`);
-                        }
-                    }
+                    content.push({
+                        type: 'text',
+                        text: 'ANEXOS:\nNOTA_ANEXOS: Imagens têm preview; ficheiros de texto mostram CONTEUDO; outros têm link ABRIR. Copia os caminhos para o utilizador abrir/ver.',
+                    });
+                    content.push(...(await materializeAllAttachments(card.id, card.attachments)));
                 }
                 else {
-                    footer.push('ANEXOS: Nenhum');
+                    content.push({ type: 'text', text: 'ANEXOS: Nenhum' });
                 }
-                footer.push('---');
+                const tail = ['---'];
                 // Secção 8: Comentários
                 const realComments = comments.filter((c) => c.type === 'comment');
                 if (realComments.length > 0) {
-                    footer.push('COMENTARIOS:');
+                    tail.push('COMENTARIOS:');
                     for (const c of realComments) {
                         const dateStr = new Date(c.created_at).toLocaleString('pt-PT');
-                        footer.push(`  ${c.user_name} (${dateStr}): ${c.content}`);
+                        tail.push(`  ${c.user_name} (${dateStr}): ${c.content}`);
                     }
                 }
                 else {
-                    footer.push('COMENTARIOS: Nenhum');
+                    tail.push('COMENTARIOS: Nenhum');
                 }
-                footer.push('---');
+                tail.push('---');
                 // Secção 9: Histórico
                 const history = comments.filter((c) => c.type !== 'comment');
                 if (history.length > 0) {
-                    footer.push('HISTORICO:');
+                    tail.push('HISTORICO:');
                     for (const h of history) {
                         const dateStr = new Date(h.created_at).toLocaleString('pt-PT');
-                        footer.push(`  ${h.type} por ${h.user_name} em ${dateStr}`);
+                        tail.push(`  ${h.type} por ${h.user_name} em ${dateStr}`);
                     }
                 }
                 else {
-                    footer.push('HISTORICO: Nenhum');
+                    tail.push('HISTORICO: Nenhum');
                 }
-                content.push({ type: 'text', text: footer.join('\n') });
+                content.push({ type: 'text', text: tail.join('\n') });
+                return { content };
+            }
+            case 'get_card_attachment': {
+                const a = args;
+                const card = await getCardDetails(a.card_id);
+                const attachments = card.attachments ?? [];
+                if (attachments.length === 0) {
+                    return { content: [{ type: 'text', text: 'Este cartão não tem anexos.' }] };
+                }
+                let index = a.attachment_index !== undefined ? a.attachment_index - 1 : -1;
+                if (index < 0 && a.attachment_name) {
+                    const q = a.attachment_name.toLowerCase();
+                    index = attachments.findIndex((att) => att.name.toLowerCase().includes(q));
+                }
+                if (index < 0 && a.attachment_index === undefined && !a.attachment_name) {
+                    const lines = attachments.map((att, i) => `${i + 1}. ${att.name}`);
+                    return {
+                        content: [{
+                                type: 'text',
+                                text: `Indica attachment_index (1-${attachments.length}) ou attachment_name.\n\nAnexos:\n${lines.join('\n')}`,
+                            }],
+                    };
+                }
+                if (index < 0 || index >= attachments.length) {
+                    return {
+                        content: [{ type: 'text', text: 'Anexo não encontrado. Usa get_card para ver a lista de anexos.' }],
+                        isError: true,
+                    };
+                }
+                const att = attachments[index];
+                const content = await materializeAttachment(card.id, index, att);
                 return { content };
             }
             default:

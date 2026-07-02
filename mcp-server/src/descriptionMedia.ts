@@ -1,45 +1,22 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import {
+  IMAGE_CACHE_DIR,
+  ensureDir,
+  mimeToExt,
+  toMarkdownImagePath,
+} from './mediaCache.js';
 
 export type ToolContent =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string };
 
-const IMAGE_CACHE_DIR =
-  process.env.ANTURIO_IMAGE_CACHE_DIR ??
-  path.join(os.homedir(), '.cursor', 'anturio-boards-images');
-
-const WORKSPACE_ROOT = process.env.ANTURIO_WORKSPACE_ROOT?.replace(/\\/g, '/');
-
-function ensureImageCacheDir(): void {
-  fs.mkdirSync(IMAGE_CACHE_DIR, { recursive: true });
-}
-
-function mimeToExt(mimeType: string): string {
-  const subtype = mimeType.split('/')[1] ?? 'png';
-  return subtype.replace('jpeg', 'jpg');
-}
-
 function saveDescriptionImage(cardId: number, imageIndex: number, mimeType: string, base64: string): string {
-  ensureImageCacheDir();
+  ensureDir(IMAGE_CACHE_DIR);
   const filename = `card-${cardId}-${imageIndex}.${mimeToExt(mimeType)}`;
   const filepath = path.join(IMAGE_CACHE_DIR, filename);
   fs.writeFileSync(filepath, Buffer.from(base64, 'base64'));
   return filepath;
-}
-
-function toMarkdownImagePath(filepath: string, alt: string): string {
-  const normalized = path.resolve(filepath).replace(/\\/g, '/');
-  const workspaceRoot = WORKSPACE_ROOT ? path.resolve(WORKSPACE_ROOT).replace(/\\/g, '/') : undefined;
-  if (workspaceRoot && normalized.toLowerCase().startsWith(`${workspaceRoot.toLowerCase()}/`)) {
-    const relative = normalized.slice(workspaceRoot.length).replace(/^\//, '');
-    return `![${alt}](${relative})`;
-  }
-  if (normalized.match(/^[A-Za-z]:\//)) {
-    return `![${alt}](file:///${normalized})`;
-  }
-  return `![${alt}](file://${normalized})`;
 }
 
 function getImgAlt(tag: string, fallback: string): string {

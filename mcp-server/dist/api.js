@@ -35,6 +35,22 @@ async function requestGetFirst(paths) {
     }
     throw lastError ?? new Error('Nenhum endpoint disponível para este pedido.');
 }
+export async function fetchAttachmentBinary(url) {
+    const fullUrl = url.startsWith('http') ? url : url.startsWith('/') ? `${SERVER_URL}${url}` : url;
+    const res = await fetch(fullUrl, {
+        headers: {
+            'X-API-Key': API_KEY,
+            'User-Agent': 'anturio-mcp/0.1.0',
+        },
+    });
+    if (!res.ok) {
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(`Download do anexo falhou (${res.status}): ${text}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const mimeType = res.headers.get('content-type')?.split(';')[0]?.trim() || 'application/octet-stream';
+    return { buffer, mimeType };
+}
 export async function listProjects() {
     const data = await request('GET', '/api/v1/projects');
     return data.projects;

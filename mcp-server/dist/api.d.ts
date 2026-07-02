@@ -65,6 +65,10 @@ export interface Card {
     cover?: string;
     project_id?: number;
 }
+export declare function fetchAttachmentBinary(url: string): Promise<{
+    buffer: Buffer;
+    mimeType: string;
+}>;
 export declare function listProjects(): Promise<Project[]>;
 export declare function getProjectCards(projectId: number): Promise<{
     columns: Column[];
